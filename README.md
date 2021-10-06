@@ -56,13 +56,13 @@ scaling "worker_pool_policy" {
 
       evenly_split_azs   = true
       stop_first         = true
-      image_name         = "meigas-v1.0.0"
-      flavor_name        = "b2.medium"
-      pool_name          = "wrkr-test"
-      name_prefix        = "meigas-play-es-1-wrkr-test-"
-      network_id         = "c114a407-b11e-4b57-9c3e-5c461b91435a" # this is the network id
+      image_name         = "myimage-v1"
+      flavor_name        = "t1.large"
+      pool_name          = "test-pool"
+      name_prefix        = "managed-pool-"
+      network_id         = "c114a407-b11e-4b57-9c3e-5c461b91435a"
       user_data_template = "user-data.gotxt"
-      security_groups    = "docker-play-es-1,consul_client-play-es-1,meigas_default-play-es-1,nomad_client-play-es-1,meigas_SSH-play-es-1"
+      security_groups    = "consul,nomad,default"
 
       node_class                    = "wrkr-test"
       node_drain_deadline           = "1h"
