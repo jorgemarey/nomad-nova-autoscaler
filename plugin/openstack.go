@@ -20,6 +20,10 @@ import (
 )
 
 const (
+	version = "v0.1.0"
+)
+
+const (
 	defaultActionTimeout = 90 // Seconds. // TODO: allow configuring this value
 	poolTag              = "na_pool:%s"
 	configItemSeparator  = ","
@@ -79,6 +83,7 @@ func (t *TargetPlugin) setupOSClients(config map[string]string) error {
 	t.getDefaultAvZones()
 	t.getCurrentMicroVersion(t.computeClient)
 
+	t.logger.Info("completed set-up of plugin", "version", version)
 	return nil
 }
 
