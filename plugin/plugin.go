@@ -67,6 +67,7 @@ type TargetPlugin struct {
 
 	idMapper bool
 	avZones  []string
+	cache    map[string]string
 
 	// clusterUtils provides general cluster scaling utilities for querying the
 	// state of nodes pools and performing scaling tasks.

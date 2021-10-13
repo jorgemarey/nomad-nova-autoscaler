@@ -34,6 +34,8 @@ const (
 // setupOSClients takes the passed config mapping and instantiates the
 // required OS service clients.
 func (t *TargetPlugin) setupOSClients(config map[string]string) error {
+	t.cache = make(map[string]string)
+
 	// use env vars but don't fail if not all are provided
 	ao, _ := openstack.AuthOptionsFromEnv()
 
@@ -471,14 +473,20 @@ func (t *TargetPlugin) getFlavorInfo(ctx context.Context, config map[string]stri
 		return nil, fmt.Errorf("required config param %s or %s", configKeyFlavorID, configKeyFlavorName)
 	}
 
+	key := cachekey(flavorCacheKey, flavorName)
+	if id, ok := t.cache[key]; ok {
+		return &flavorInfo{flavorID: id}, nil
+	}
+
 	t.logger.Debug("searching for flavor", "name", flavorName)
 	flavorID, err := flavorutils.IDFromName(t.computeClient, flavorName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find flavor with name %s", flavorName)
 	}
 	t.logger.Debug("found flavor ID", "name", flavorName, "id", flavorID)
-	return &flavorInfo{flavorID: flavorID}, nil
 
+	t.cache[key] = flavorID
+	return &flavorInfo{flavorID: flavorID}, nil
 }
 
 func (t *TargetPlugin) getImageID(ctx context.Context, config map[string]string) (string, error) {
@@ -491,12 +499,19 @@ func (t *TargetPlugin) getImageID(ctx context.Context, config map[string]string)
 		return "", fmt.Errorf("required config param %s or %s", configKeyImageID, configKeyImageName)
 	}
 
+	key := cachekey(imageCacheKey, imageName)
+	if id, ok := t.cache[key]; ok {
+		return id, nil
+	}
+
 	t.logger.Debug("searching for image", "name", imageName)
 	imageID, err := imageutils.IDFromName(t.imageClient, imageName)
 	if err != nil {
 		return "", fmt.Errorf("failed to find image with name %s: %s", imageName, err)
 	}
 	t.logger.Debug("found image ID", "name", imageName, "id", imageID)
+
+	t.cache[key] = imageID
 	return imageID, nil
 }
 

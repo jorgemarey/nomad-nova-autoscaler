@@ -10,6 +10,11 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
 )
 
+const (
+	flavorCacheKey  = "flavor:%s"
+	imageCacheKey   = "image:%s"
+)
+
 type azInstanceDist struct {
 	AZName string
 	Count  int
@@ -116,4 +121,8 @@ func generateUUID() string {
 		buf[6:8],
 		buf[8:10],
 		buf[10:16])
+}
+
+func cachekey(format, name string) string {
+	return fmt.Sprintf(format, name)
 }
