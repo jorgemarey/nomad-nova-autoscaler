@@ -24,6 +24,8 @@ const (
 	configKeyPassword    = "password"
 	configKeyRegionName  = "region_name"
 	configKeyDomainName  = "domain_name"
+	configKeyCACertFile  = "cacert_file"
+	configKeyInsecure    = "insecure_skip_verify"
 
 	configKeyNodeIDAttr = "id_attribute"
 

@@ -1,3 +1,11 @@
+## 0.2.1 (Oct 13, 2021)
+
+FEATURES:
+* Include `cacert_file`  and `insecure_skip_verify` options
+
+BUG FIXES:
+* Fix AZ list (correctly remove nova default AZ)
+
 ## 0.2.0 (Oct 13, 2021)
 
 FEATURES:

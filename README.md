@@ -34,6 +34,8 @@ target "os-nova" {
 * `password` `(string: "")` - The password to use when authenticating
 * `region_name` `(string: "")` - The services region name to use
 * `domain_name` `(string: "")` - The domain of the user
+* `cacert_file` `(string: "")` - Location of the certificate to use for OS APIs verification
+* `insecure_skip_verify` `(string: "")` - Skip TLS certificate verification
 
 * `id_attribute` `(string: "")` - The nomad attribute to use that maps the nomad client to an OS Compute instance. By default `unique.platform.aws.hostname` is used and a previous search is needed
 to get the instance id using the instance name

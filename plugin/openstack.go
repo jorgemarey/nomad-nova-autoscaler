@@ -2,9 +2,15 @@ package plugin
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"io/ioutil"
+	"net"
+	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
@@ -21,7 +27,7 @@ import (
 )
 
 const (
-	version = "v0.2.0"
+	version = "v0.2.1"
 )
 
 const (
@@ -59,11 +65,65 @@ func (t *TargetPlugin) setupOSClients(config map[string]string) error {
 		ao.TenantName = projectName
 	}
 	ao.AllowReauth = true
-	provider, err := openstack.AuthenticatedClient(ao)
+
+	provider, err := openstack.NewClient(ao.IdentityEndpoint)
 	if err != nil {
+		return fmt.Errorf("failed to create OS client: %v", err)
+	}
+	if err := t.configureTLS(provider, config); err != nil {
+		return fmt.Errorf("failed configure TLS options: %v", err)
+	}
+	if err := openstack.Authenticate(provider, ao); err != nil {
 		return fmt.Errorf("failed to authenticate with OS: %v", err)
 	}
 
+	if err := t.configureClients(provider, config); err != nil {
+		return err
+	}
+
+	t.getDefaultAvZones()
+	t.getCurrentMicroVersion(t.computeClient)
+
+	t.logger.Info("completed set-up of plugin", "version", version)
+	return nil
+}
+
+func (t *TargetPlugin) configureTLS(provider *gophercloud.ProviderClient, config map[string]string) error {
+	var tlsConfig *tls.Config
+
+	if certFile, ok := config[configKeyCACertFile]; ok {
+		caCert, err := ioutil.ReadFile(certFile)
+		if err != nil {
+			return err
+		}
+		caCertPool := x509.NewCertPool()
+		caCertPool.AppendCertsFromPEM(caCert)
+		tlsConfig = &tls.Config{RootCAs: caCertPool}
+	}
+
+	if _, ok := config[configKeyInsecure]; ok {
+		tlsConfig = &tls.Config{InsecureSkipVerify: true}
+	}
+
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		TLSClientConfig:       tlsConfig,
+	}
+	provider.HTTPClient.Transport = transport
+
+	return nil
+}
+
+func (t *TargetPlugin) configureClients(provider *gophercloud.ProviderClient, config map[string]string) error {
 	regionName := "RegionOne"
 	if region, ok := config[configKeyRegionName]; ok {
 		regionName = region
@@ -88,11 +148,6 @@ func (t *TargetPlugin) setupOSClients(config map[string]string) error {
 	t.networkClient = networkClient
 
 	t.computeClient.Microversion = "2.52"
-
-	t.getDefaultAvZones()
-	t.getCurrentMicroVersion(t.computeClient)
-
-	t.logger.Info("completed set-up of plugin", "version", version)
 	return nil
 }
 
