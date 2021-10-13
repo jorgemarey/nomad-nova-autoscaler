@@ -114,10 +114,10 @@ func (t *TargetPlugin) getDefaultAvZones() {
 		return
 	}
 
-	zones := make([]string, len(availabilityZoneInfo))
-	for i, zoneInfo := range availabilityZoneInfo {
+	zones := make([]string, 0)
+	for _, zoneInfo := range availabilityZoneInfo {
 		if zoneInfo.ZoneName != "nova" { // do not use default nova AZ
-			zones[i] = zoneInfo.ZoneName
+			zones = append(zones, zoneInfo.ZoneName)
 		}
 	}
 	t.logger.Info(fmt.Sprintf("discovered the following AZs: %s, saving as default", zones))
