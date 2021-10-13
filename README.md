@@ -84,7 +84,8 @@ scaling "worker_pool_policy" {
 * `availavility_zones` `(string: "")` - The list of AZ that intances can be launched in. By default the plugin will search for all the available zones.
 If no zones are provided, and none are discovered, a random one will be asigned by Nova
 * `evenly_split_azs` `(string: "")` - Set this to any value other than blank to try to balance the instances over the provided AZs when creating/destroying
-* `network_id` `(string: <required>)` - The network ID where to lauch the servers
+* `network_id` `(string: "")` - The network ID where to lauch the servers
+* `network_name` `(string: "")` - The network name to use. One of `network_id` or `network_name` must be set
 * `security_groups` `(string: "")` - A comma-separated list of SG names to provide on creation
 * `user_data_template` `(string: "")` - The path to a file containing the user data for the instance creation. This will be treated as a golang
 template, so {{ }} characters will be executed. `.Name`, `.AZ`, `.RandomUUID` and `.PoolName` can be used

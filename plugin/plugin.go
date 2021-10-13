@@ -27,18 +27,19 @@ const (
 
 	configKeyNodeIDAttr = "id_attribute"
 
-	configKeyName       = "name"
-	configKeyNamePrefix = "name_prefix"
-	configKeyPoolName   = "pool_name"
-	configKeyImageID    = "image_id"
-	configKeyImageName  = "image_name"
-	configKeyFlavorID   = "flavor_id"
-	configKeyFlavorName = "flavor_name"
-	configKeyAvZones    = "availavility_zones" // default is to leave AZ blank for nova to fill
-	configKeyESAZ       = "evenly_split_azs"
-	configKeyNetworkID  = "network_id"
-	configKeySGNames    = "security_groups" // comma separated values
-	configKeyUserDataT  = "user_data_template"
+	configKeyName        = "name"
+	configKeyNamePrefix  = "name_prefix"
+	configKeyPoolName    = "pool_name"
+	configKeyImageID     = "image_id"
+	configKeyImageName   = "image_name"
+	configKeyFlavorID    = "flavor_id"
+	configKeyFlavorName  = "flavor_name"
+	configKeyAvZones     = "availavility_zones" // default is to leave AZ blank for nova to fill
+	configKeyESAZ        = "evenly_split_azs"
+	configKeyNetworkID   = "network_id"
+	configKeyNetworkName = "network_name"
+	configKeySGNames     = "security_groups" // comma separated values
+	configKeyUserDataT   = "user_data_template"
 	// TODO: configKeyServerGroup = "server_group"
 	configKeyMetadata = "metadata" // comma separated k=v values
 	configKeyTags     = "tags"     // comma separated values
@@ -64,6 +65,7 @@ type TargetPlugin struct {
 	logger        hclog.Logger
 	computeClient *gophercloud.ServiceClient
 	imageClient   *gophercloud.ServiceClient
+	networkClient *gophercloud.ServiceClient
 
 	idMapper bool
 	avZones  []string

@@ -13,6 +13,7 @@ import (
 const (
 	flavorCacheKey  = "flavor:%s"
 	imageCacheKey   = "image:%s"
+	networkCacheKey = "network:%s"
 )
 
 type azInstanceDist struct {

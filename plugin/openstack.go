@@ -15,6 +15,7 @@ import (
 	"github.com/gophercloud/gophercloud/pagination"
 	flavorutils "github.com/gophercloud/utils/openstack/compute/v2/flavors"
 	imageutils "github.com/gophercloud/utils/openstack/imageservice/v2/images"
+	networkutils "github.com/gophercloud/utils/openstack/networking/v2/networks"
 	"github.com/hashicorp/nomad-autoscaler/sdk/helper/scaleutils"
 	"github.com/hashicorp/nomad/api"
 )
@@ -79,6 +80,12 @@ func (t *TargetPlugin) setupOSClients(config map[string]string) error {
 		return fmt.Errorf("failed to create OS image client: %v", err)
 	}
 	t.imageClient = imageClient
+
+	networkClient, err := openstack.NewNetworkV2(provider, gophercloud.EndpointOpts{Region: regionName})
+	if err != nil {
+		return fmt.Errorf("failed to create OS network client: %v", err)
+	}
+	t.networkClient = networkClient
 
 	t.computeClient.Microversion = "2.52"
 
@@ -392,7 +399,6 @@ func (t *TargetPlugin) getCreateData(ctx context.Context, config map[string]stri
 		name:               config[configKeyName],
 		namePrefix:         config[configKeyNamePrefix],
 		pool:               config[configKeyPoolName],
-		networkUUID:        config[configKeyNetworkID],
 		userDataTemplate:   config[configKeyUserDataT],
 		evenlydistributeAZ: config[configKeyESAZ] != "",
 	}
@@ -412,6 +418,12 @@ func (t *TargetPlugin) getCreateData(ctx context.Context, config map[string]stri
 		return nil, err
 	}
 	data.flavorID = flavorInfo.flavorID
+
+	networkID, err := t.getNetworkID(ctx, config)
+	if err != nil {
+		return nil, err
+	}
+	data.networkUUID = networkID
 
 	if sgNames, ok := config[configKeySGNames]; ok && strings.TrimSpace(sgNames) != "" {
 		sgs := strings.Split(strings.TrimSpace(sgNames), configItemSeparator)
@@ -513,6 +525,32 @@ func (t *TargetPlugin) getImageID(ctx context.Context, config map[string]string)
 
 	t.cache[key] = imageID
 	return imageID, nil
+}
+
+func (t *TargetPlugin) getNetworkID(ctx context.Context, config map[string]string) (string, error) {
+	if id, ok := config[configKeyNetworkID]; ok {
+		return id, nil
+	}
+
+	networkName, ok := config[configKeyNetworkName]
+	if !ok {
+		return "", fmt.Errorf("required config param %s or %s", configKeyNetworkID, configKeyNetworkName)
+	}
+
+	key := cachekey(networkCacheKey, networkName)
+	if id, ok := t.cache[key]; ok {
+		return id, nil
+	}
+
+	t.logger.Debug("searching for network", "name", networkName)
+	networkID, err := networkutils.IDFromName(t.networkClient, networkName)
+	if err != nil {
+		return "", fmt.Errorf("failed to find network with name %s: %s", networkName, err)
+	}
+	t.logger.Debug("found network ID", "name", networkName, "id", networkID)
+
+	t.cache[key] = networkID
+	return networkID, nil
 }
 
 // osNovaNodeIDMapBuilder is used to identify the Opensack Nova ID of a Nomad node using
