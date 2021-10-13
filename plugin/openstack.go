@@ -9,9 +9,9 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/compute/apiversions"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/availabilityzones"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/startstop"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
-	"github.com/gophercloud/gophercloud/openstack/sharedfilesystems/v2/availabilityzones"
 	"github.com/gophercloud/gophercloud/pagination"
 	flavorutils "github.com/gophercloud/utils/openstack/compute/v2/flavors"
 	imageutils "github.com/gophercloud/utils/openstack/imageservice/v2/images"
@@ -107,7 +107,9 @@ func (t *TargetPlugin) getDefaultAvZones() {
 
 	zones := make([]string, len(availabilityZoneInfo))
 	for i, zoneInfo := range availabilityZoneInfo {
-		zones[i] = zoneInfo.Name
+		if zoneInfo.ZoneName != "nova" { // do not use default nova AZ
+			zones[i] = zoneInfo.ZoneName
+		}
 	}
 	t.logger.Info(fmt.Sprintf("discovered the following AZs: %s, saving as default", zones))
 	t.avZones = zones
