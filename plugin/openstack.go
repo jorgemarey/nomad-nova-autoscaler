@@ -625,7 +625,13 @@ func osNovaNodeIDMapBuilder(property string) scaleutils.ClusterNodeIDLookupFunc 
 		property = "unique.platform.aws.hostname"
 	}
 	return func(n *api.Node) (string, error) {
-		val, ok := n.Attributes[property]
+		mapToUse := n.Attributes
+		if strings.HasPrefix(property, "meta.") {
+			mapToUse = n.Meta
+			property = strings.TrimPrefix(property, "meta.")
+		}
+
+		val, ok := mapToUse[property]
 		if !ok || val == "" {
 			return "", fmt.Errorf("attribute %q not found", property)
 		}
