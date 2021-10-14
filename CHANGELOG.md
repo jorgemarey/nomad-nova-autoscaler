@@ -1,3 +1,12 @@
+## 0.2.2 (Oct 14, 2021)
+
+FEATURES:
+* Allow using `meta.` attributes to map Nova server ID
+
+BUG FIXES:
+* Fix server deletion when filter is by name
+* Return an error is a server was not found when deleting
+
 ## 0.2.1 (Oct 13, 2021)
 
 FEATURES:
