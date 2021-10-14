@@ -327,27 +327,37 @@ func (t *TargetPlugin) deleteServers(ctx context.Context, pool string, stopFirst
 		return nil
 	}
 
-	var instanceIDMap = map[string]bool{}
+	var instanceNameMap = map[string]bool{}
 	for _, id := range instanceIDs {
-		instanceIDMap[id] = true
+		instanceNameMap[id] = false
 	}
 
-	pager := servers.List(t.computeClient, servers.ListOpts{Tags: fmt.Sprint(poolTag, pool)})
+	pager := servers.List(t.computeClient, servers.ListOpts{Tags: fmt.Sprintf(poolTag, pool)})
 	err := pager.EachPage(func(page pagination.Page) (bool, error) {
 		serverList, err := servers.ExtractServers(page)
 		if err != nil {
 			return false, err
 		}
 		for _, server := range serverList {
-			if _, ok := instanceIDMap[server.Name]; ok {
+			if _, ok := instanceNameMap[server.Name]; ok {
 				if err := t.deleteServer(ctx, stopFirst, forceDelete, server.ID); err != nil {
 					return false, err
 				}
+				instanceNameMap[server.Name] = true
 			}
 		}
 		return true, nil
 	})
-	return err
+	if err != nil {
+		return err
+	}
+
+	for name, deleted := range instanceNameMap {
+		if !deleted {
+			return fmt.Errorf("instance with name %s not found", name)
+		}
+	}
+	return nil
 }
 
 func (t *TargetPlugin) deleteServer(ctx context.Context, stopFirst, forceDelete bool, instanceID string) error {
