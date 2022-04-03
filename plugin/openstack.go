@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	version = "v0.2.2"
+	version = "v0.2.3"
 )
 
 const (
@@ -426,12 +426,18 @@ func (t *TargetPlugin) countServers(ctx context.Context, pool string) (int64, in
 		if err := servers.ExtractServersInto(page, &serverList); err != nil {
 			return false, err
 		}
-		total += int64(len(serverList))
+		// TODO: check other status of servers: https://docs.openstack.org/api-guide/compute/server_concepts.html
+		// add option to allow setting the status of the servers to be counted
+		// and another option to specify what to do with servers in ERROR state (or to allow counting them as well)
 		for _, v := range serverList {
+			if v.Status == "ERROR" {
+				continue
+			}
 			if v.Status == "ACTIVE" {
 				ready += 1
 			}
 			azDist[v.AZ] = azDist[v.AZ] + 1
+			total += 1
 		}
 		return true, nil
 	})

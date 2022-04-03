@@ -1,3 +1,14 @@
+## 0.2.3 (Apr 3, 2022)
+
+FEATURES:
+* Allow configuring a timeout for creation and deletion of servers
+* Allow setting a `value_separator` to use when splitting value strings
+* Update autoscaler library to v0.3.6
+
+BUG FIXES:
+* Fix use of `id_attribute` failing after the first use.
+* Do not count servers in ERROR state towards the total
+
 ## 0.2.2 (Oct 14, 2021)
 
 FEATURES:

@@ -39,6 +39,7 @@ target "os-nova" {
 
 * `id_attribute` `(string: "")` - The nomad attribute to use that maps the nomad client to an OS Compute instance. By default `unique.platform.aws.hostname` is used and a previous search is needed
 to get the instance id using the instance name
+* `action_timeout` `(string: "")` - The timeout to use when performing create and delete actions over servers. This should be specified as a duration. The default vaule is 90s
 
 ### Policy Configuration
 
@@ -93,6 +94,8 @@ If no zones are provided, and none are discovered, a random one will be asigned 
 template, so {{ }} characters will be executed. `.Name`, `.AZ`, `.RandomUUID` and `.PoolName` can be used
 * `metadata` `(string: "")` - A comma-separated, equal-separated key value items to add to the servers. e.g. "k1=v,k2=b"
 * `tags` `(string: "")` - A comma-separated list of tags to apply on the servers
+* `value_separator` `(string: ",")` - Separator to use when splitting configuraiton options that are used as lists. Changing this value will afect the
+separator used in `availavility_zones`, `security_groups`, `metadata` and `tags`.
 
 * `stop_first` `(string: "")` - Set this to any value other than blank to signal that servers must be stopped before deleted.
 * `force_delete` `(string: "")` - Set this to any value other than blank to use the force when deleting servers :)
