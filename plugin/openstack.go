@@ -32,6 +32,10 @@ const (
 
 const (
 	defaultActionTimeout        = 90 // Seconds
+	poolTag                     = "na_pool:%s"
+	defaultConfigValueSeparator = ","
+	configKVSeparator           = "="
+	maxConcurrentActions        = "5"
 )
 
 // setupOSClients takes the passed config mapping and instantiates the
@@ -463,6 +467,10 @@ func (t *TargetPlugin) getCreateData(ctx context.Context, config map[string]stri
 		userDataTemplate:   config[configKeyUserDataT],
 		evenlydistributeAZ: config[configKeyESAZ] != "",
 	}
+	configValueSeparator := defaultConfigValueSeparator
+	if sep, ok := config[configKeyValueSeparator]; ok && sep != "" {
+		configValueSeparator = sep
+	}
 
 	if data.name != "" && data.namePrefix != "" {
 		return nil, fmt.Errorf("only one of %s or %s can have value", configKeyName, configKeyNamePrefix)
@@ -487,7 +495,7 @@ func (t *TargetPlugin) getCreateData(ctx context.Context, config map[string]stri
 	data.networkUUID = networkID
 
 	if sgNames, ok := config[configKeySGNames]; ok && strings.TrimSpace(sgNames) != "" {
-		sgs := strings.Split(strings.TrimSpace(sgNames), configItemSeparator)
+		sgs := strings.Split(strings.TrimSpace(sgNames), configValueSeparator)
 		data.securityGroups = make([]string, len(sgs))
 		for i, name := range sgs {
 			data.securityGroups[i] = strings.TrimSpace(name)
@@ -495,10 +503,10 @@ func (t *TargetPlugin) getCreateData(ctx context.Context, config map[string]stri
 	}
 
 	if metadata, ok := config[configKeyMetadata]; ok && strings.TrimSpace(metadata) != "" {
-		metadataList := strings.Split(strings.TrimSpace(metadata), configItemSeparator)
+		metadataList := strings.Split(strings.TrimSpace(metadata), configValueSeparator)
 		data.metadata = make(map[string]string)
 		for _, v := range metadataList {
-			kv := strings.Split(v, configValueSeparator)
+			kv := strings.Split(v, configKVSeparator)
 			if len(kv) != 2 {
 				t.logger.Warn("metadata value is not correctly provided", "element", kv)
 				continue
@@ -508,7 +516,7 @@ func (t *TargetPlugin) getCreateData(ctx context.Context, config map[string]stri
 	}
 
 	if tags, ok := config[configKeyTags]; ok && strings.TrimSpace(tags) != "" {
-		tagList := strings.Split(strings.TrimSpace(tags), configItemSeparator)
+		tagList := strings.Split(strings.TrimSpace(tags), configValueSeparator)
 		data.tags = make([]string, len(tagList))
 		for i, tag := range tagList {
 			data.tags[i] = strings.TrimSpace(tag)
@@ -516,7 +524,7 @@ func (t *TargetPlugin) getCreateData(ctx context.Context, config map[string]stri
 	}
 
 	if zones, ok := config[configKeyAvZones]; ok && strings.TrimSpace(zones) != "" {
-		zoneList := strings.Split(strings.TrimSpace(zones), configItemSeparator)
+		zoneList := strings.Split(strings.TrimSpace(zones), configValueSeparator)
 		data.availabilityZones = make([]string, len(zoneList))
 		for i, name := range zoneList {
 			data.availabilityZones[i] = strings.TrimSpace(name)

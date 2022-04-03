@@ -47,6 +47,7 @@ const (
 	configKeyMetadata = "metadata" // comma separated k=v values
 	configKeyTags     = "tags"     // comma separated values
 
+	configKeyValueSeparator = "value_separator"
 	configKeyActionTimeout  = "action_timeout"
 
 	configKeyStopFirst   = "stop_first"
