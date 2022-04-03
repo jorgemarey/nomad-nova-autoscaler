@@ -617,14 +617,19 @@ func (t *TargetPlugin) getNetworkID(ctx context.Context, config map[string]strin
 // osNovaNodeIDMapBuilder is used to identify the Opensack Nova ID of a Nomad node using
 // the relevant attribute value.
 func osNovaNodeIDMapBuilder(property string) scaleutils.ClusterNodeIDLookupFunc {
+	var isMeta bool
 	if property == "" {
 		property = "unique.platform.aws.hostname"
 	}
+	if strings.HasPrefix(property, "meta.") {
+		isMeta = true
+		property = strings.TrimPrefix(property, "meta.")
+	}
+
 	return func(n *api.Node) (string, error) {
 		mapToUse := n.Attributes
-		if strings.HasPrefix(property, "meta.") {
+		if isMeta {
 			mapToUse = n.Meta
-			property = strings.TrimPrefix(property, "meta.")
 		}
 
 		val, ok := mapToUse[property]
