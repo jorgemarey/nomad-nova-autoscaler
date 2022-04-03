@@ -31,11 +31,7 @@ const (
 )
 
 const (
-	defaultActionTimeout = 90 // Seconds. // TODO: allow configuring this value
-	poolTag              = "na_pool:%s"
-	configItemSeparator  = ","
-	configValueSeparator = "="
-	maxConcurrentActions = "5"
+	defaultActionTimeout        = 90 // Seconds
 )
 
 // setupOSClients takes the passed config mapping and instantiates the
@@ -308,7 +304,7 @@ func (t *TargetPlugin) createServer(ctx context.Context, common *commonCreateDat
 	}
 
 	t.logger.Debug("waiting for active status", "server", server.ID)
-	if err := servers.WaitForStatus(t.computeClient, server.ID, "ACTIVE", defaultActionTimeout); err != nil {
+	if err := servers.WaitForStatus(t.computeClient, server.ID, "ACTIVE", t.actionTimeout); err != nil {
 		return fmt.Errorf("error waiting for server id %s to get to ACTIVE status: %v", server.ID, err)
 	}
 
@@ -369,7 +365,7 @@ func (t *TargetPlugin) deleteServer(ctx context.Context, stopFirst, forceDelete 
 			return fmt.Errorf("failed to stop server id %s: %v", instanceID, err)
 		}
 		log.Debug("waiting for shutoff status")
-		if err := servers.WaitForStatus(t.computeClient, instanceID, "SHUTOFF", defaultActionTimeout); err != nil {
+		if err := servers.WaitForStatus(t.computeClient, instanceID, "SHUTOFF", t.actionTimeout); err != nil {
 			return fmt.Errorf("error waiting for server id %s to get to SHUTOFF status: %v", instanceID, err)
 		}
 		log.Debug("instance shutoff completed")
@@ -386,7 +382,7 @@ func (t *TargetPlugin) deleteServer(ctx context.Context, stopFirst, forceDelete 
 		}
 	}
 	log.Debug("waiting for instance deletion")
-	if err := gophercloud.WaitFor(defaultActionTimeout, func() (bool, error) {
+	if err := gophercloud.WaitFor(t.actionTimeout, func() (bool, error) {
 		current, err := servers.Get(t.computeClient, instanceID).Extract()
 		if err != nil {
 			if _, ok := err.(gophercloud.ErrDefault404); ok {

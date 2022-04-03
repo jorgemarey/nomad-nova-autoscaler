@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/hashicorp/go-hclog"
@@ -46,6 +47,8 @@ const (
 	configKeyMetadata = "metadata" // comma separated k=v values
 	configKeyTags     = "tags"     // comma separated values
 
+	configKeyActionTimeout  = "action_timeout"
+
 	configKeyStopFirst   = "stop_first"
 	configKeyForceDelete = "force_delete"
 )
@@ -69,9 +72,10 @@ type TargetPlugin struct {
 	imageClient   *gophercloud.ServiceClient
 	networkClient *gophercloud.ServiceClient
 
-	idMapper bool
-	avZones  []string
-	cache    map[string]string
+	idMapper      bool
+	avZones       []string
+	cache         map[string]string
+	actionTimeout int // seconds
 
 	// clusterUtils provides general cluster scaling utilities for querying the
 	// state of nodes pools and performing scaling tasks.
@@ -92,6 +96,14 @@ func (t *TargetPlugin) SetConfig(config map[string]string) error {
 
 	if err := t.setupOSClients(config); err != nil {
 		return err
+	}
+	t.actionTimeout = defaultActionTimeout
+	if timeout, ok := config[configKeyActionTimeout]; ok {
+		d, err := time.ParseDuration(timeout)
+		if err != nil {
+			return fmt.Errorf("failed to parse action_timeout: %v", err)
+		}
+		t.actionTimeout = int(d.Seconds())
 	}
 
 	clusterUtils, err := scaleutils.NewClusterScaleUtils(nomad.ConfigFromNamespacedMap(config), t.logger)

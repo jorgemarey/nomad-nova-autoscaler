@@ -6,8 +6,8 @@ require (
 	github.com/gophercloud/gophercloud v0.21.0
 	github.com/gophercloud/utils v0.0.0-20210909165623-d7085207ff6d
 	github.com/hashicorp/go-hclog v0.16.2
-	github.com/hashicorp/nomad-autoscaler v0.3.3
-	github.com/hashicorp/nomad/api v0.0.0-20211002031720-f639f71874c1
+	github.com/hashicorp/nomad-autoscaler v0.3.6
+	github.com/hashicorp/nomad/api v0.0.0-20210503143957-4ccada7924cf
 	github.com/stretchr/testify v1.6.1
 )
 
@@ -18,7 +18,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fatih/color v1.10.0 // indirect
 	github.com/golang/protobuf v1.4.3 // indirect
-	github.com/google/go-cmp v0.5.4 // indirect
+	github.com/google/go-cmp v0.5.6 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/hashicorp/consul/api v1.8.0 // indirect
 	github.com/hashicorp/cronexpr v1.1.1 // indirect
