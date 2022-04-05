@@ -139,7 +139,7 @@ func (t *TargetPlugin) Scale(action sdk.ScalingAction, config map[string]string)
 	}
 
 	ctx := context.Background()
-	total, _, azDist, err := t.countServers(ctx, pool)
+	total, _, azDist, remoteIDs, err := t.countServers(ctx, pool)
 	if err != nil {
 		return fmt.Errorf("failed to count Nova servers: %v", err)
 	}
@@ -147,7 +147,7 @@ func (t *TargetPlugin) Scale(action sdk.ScalingAction, config map[string]string)
 	diff, direction := t.calculateDirection(total, action.Count)
 	switch direction {
 	case "in":
-		err = t.scaleIn(ctx, diff, config)
+		err = t.scaleIn(ctx, diff, remoteIDs, config)
 	case "out":
 		err = t.scaleOut(ctx, diff, azDist, config)
 	default:
@@ -183,7 +183,7 @@ func (t *TargetPlugin) Status(config map[string]string) (*sdk.TargetStatus, erro
 	}
 
 	ctx := context.Background()
-	total, active, _, err := t.countServers(ctx, pool)
+	total, active, _, _, err := t.countServers(ctx, pool)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count Nova servers: %v", err)
 	}

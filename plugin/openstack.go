@@ -227,8 +227,8 @@ func (t *TargetPlugin) scaleOut(ctx context.Context, count int64, azDist map[str
 
 // scaleIn updates the Auto Scaling Group desired count to match what the
 // Autoscaler has deemed required.
-func (t *TargetPlugin) scaleIn(ctx context.Context, count int64, config map[string]string) error {
-	ids, err := t.clusterUtils.RunPreScaleInTasks(ctx, config, int(count))
+func (t *TargetPlugin) scaleIn(ctx context.Context, count int64, remoteIDs []string, config map[string]string) error {
+	ids, err := t.clusterUtils.RunPreScaleInTasksWithRemoteCheck(ctx, config, remoteIDs, int(count))
 	if err != nil {
 		return fmt.Errorf("failed to perform pre-scale Nomad scale in tasks: %v", err)
 	}
@@ -415,10 +415,11 @@ type customServer struct {
 	Tags     *[]string         `json:"tags"`
 }
 
-func (t *TargetPlugin) countServers(ctx context.Context, pool string) (int64, int64, map[string]int, error) {
+func (t *TargetPlugin) countServers(ctx context.Context, pool string) (int64, int64, map[string]int, []string, error) {
 	var total int64
 	var ready int64
 	azDist := make(map[string]int)
+	remoteIDs := make([]string, 0)
 
 	pager := servers.List(t.computeClient, servers.ListOpts{Tags: fmt.Sprintf(poolTag, pool)})
 	err := pager.EachPage(func(page pagination.Page) (bool, error) {
@@ -437,11 +438,12 @@ func (t *TargetPlugin) countServers(ctx context.Context, pool string) (int64, in
 				ready += 1
 			}
 			azDist[v.AZ] = azDist[v.AZ] + 1
+			remoteIDs = append(remoteIDs, v.ID)
 			total += 1
 		}
 		return true, nil
 	})
-	return total, ready, azDist, err
+	return total, ready, azDist, remoteIDs, err
 }
 
 type customCreateData struct {

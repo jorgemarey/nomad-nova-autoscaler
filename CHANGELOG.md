@@ -1,4 +1,13 @@
+## 0.2.4 (Apr 5, 2022)
+
+BUG FIXES:
+* Fix deletion of all servers when scaling in.
+
 ## 0.2.3 (Apr 3, 2022)
+
+NOTES:
+* This version contains a bug related to https://github.com/hashicorp/nomad-autoscaler/issues/572
+that will destroy all nodes in the pool when scaling in. You should skip this and upgrade to 0.2.4
 
 FEATURES:
 * Allow configuring a timeout for creation and deletion of servers
