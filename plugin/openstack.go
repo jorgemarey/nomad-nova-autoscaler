@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	version = "v0.2.3"
+	version = "v0.2.5"
 )
 
 const (
@@ -421,6 +421,15 @@ func (t *TargetPlugin) countServers(ctx context.Context, pool string) (int64, in
 	azDist := make(map[string]int)
 	remoteIDs := make([]string, 0)
 
+	idFn := func(srv customServer) string {
+		return srv.Name
+	}
+	if t.idMapper {
+		idFn = func(srv customServer) string {
+			return srv.ID
+		}
+	}
+
 	pager := servers.List(t.computeClient, servers.ListOpts{Tags: fmt.Sprintf(poolTag, pool)})
 	err := pager.EachPage(func(page pagination.Page) (bool, error) {
 		var serverList []customServer
@@ -438,7 +447,8 @@ func (t *TargetPlugin) countServers(ctx context.Context, pool string) (int64, in
 				ready += 1
 			}
 			azDist[v.AZ] = azDist[v.AZ] + 1
-			remoteIDs = append(remoteIDs, v.ID)
+
+			remoteIDs = append(remoteIDs, idFn(v))
 			total += 1
 		}
 		return true, nil

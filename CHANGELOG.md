@@ -1,3 +1,8 @@
+## 0.2.5 (Apr 11, 2022)
+
+BUG FIXES:
+* Fix scale-in when using node name as the mapper function
+
 ## 0.2.4 (Apr 5, 2022)
 
 BUG FIXES:
