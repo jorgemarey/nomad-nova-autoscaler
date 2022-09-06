@@ -1,3 +1,14 @@
+## 0.3.0 (Sep 6, 2022)
+
+NOTES:
+* This version changes the default behaviour when counting the servers in the pool.
+Previously servers in state `ERROR` were ignored. If you want to have the same
+behaviour as previously that can be configured using the new `ignored_states`
+configuration option
+
+FEATURES:
+* Allow setting a `ignored_states` to ignore server in these states when counting
+
 ## 0.2.5 (Apr 11, 2022)
 
 BUG FIXES:

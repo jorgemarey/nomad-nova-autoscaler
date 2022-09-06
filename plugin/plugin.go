@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/gophercloud/gophercloud"
@@ -49,6 +50,7 @@ const (
 
 	configKeyValueSeparator = "value_separator"
 	configKeyActionTimeout  = "action_timeout"
+	configKeyIgnoredStates  = "ignored_states"
 
 	configKeyStopFirst   = "stop_first"
 	configKeyForceDelete = "force_delete"
@@ -77,6 +79,7 @@ type TargetPlugin struct {
 	avZones       []string
 	cache         map[string]string
 	actionTimeout int // seconds
+	ignoredStates map[string]struct{}
 
 	// clusterUtils provides general cluster scaling utilities for querying the
 	// state of nodes pools and performing scaling tasks.
@@ -98,13 +101,9 @@ func (t *TargetPlugin) SetConfig(config map[string]string) error {
 	if err := t.setupOSClients(config); err != nil {
 		return err
 	}
-	t.actionTimeout = defaultActionTimeout
-	if timeout, ok := config[configKeyActionTimeout]; ok {
-		d, err := time.ParseDuration(timeout)
-		if err != nil {
-			return fmt.Errorf("failed to parse action_timeout: %v", err)
-		}
-		t.actionTimeout = int(d.Seconds())
+
+	if err := t.configurePlugin(config); err != nil {
+		return err
 	}
 
 	clusterUtils, err := scaleutils.NewClusterScaleUtils(nomad.ConfigFromNamespacedMap(config), t.logger)
@@ -116,6 +115,32 @@ func (t *TargetPlugin) SetConfig(config map[string]string) error {
 	t.clusterUtils = clusterUtils
 	t.clusterUtils.ClusterNodeIDLookupFunc = osNovaNodeIDMapBuilder(config[configKeyNodeIDAttr])
 	t.idMapper = config[configKeyNodeIDAttr] != ""
+
+	return nil
+}
+
+func (t *TargetPlugin) configurePlugin(config map[string]string) error {
+	t.actionTimeout = defaultActionTimeout
+	if timeout, ok := config[configKeyActionTimeout]; ok {
+		d, err := time.ParseDuration(timeout)
+		if err != nil {
+			return fmt.Errorf("failed to parse action_timeout: %v", err)
+		}
+		t.actionTimeout = int(d.Seconds())
+	}
+
+	t.ignoredStates = make(map[string]struct{})
+	if states, ok := config[configKeyIgnoredStates]; ok && strings.TrimSpace(states) != "" {
+		stateList := strings.Split(strings.TrimSpace(states), ",")
+		for _, name := range stateList {
+			state := strings.ToUpper(name)
+			switch state {
+			case "ACTIVE", "BUILD", "REBOOT", "HARD_REBOOT":
+				return fmt.Errorf("error setting ignored_states: state '%s' can't be ignored", state)
+			}
+			t.ignoredStates[state] = struct{}{}
+		}
+	}
 
 	return nil
 }
