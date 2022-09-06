@@ -436,18 +436,22 @@ func (t *TargetPlugin) countServers(ctx context.Context, pool string) (int64, in
 		if err := servers.ExtractServersInto(page, &serverList); err != nil {
 			return false, err
 		}
-		// TODO: check other status of servers: https://docs.openstack.org/api-guide/compute/server_concepts.html
-		// add option to allow setting the status of the servers to be counted
-		// and another option to specify what to do with servers in ERROR state (or to allow counting them as well)
+
 		for _, v := range serverList {
-			if v.Status == "ERROR" {
+			if _, ok := t.ignoredStates[v.Status]; ok {
+				t.logger.Debug("Ignored server due to state", "id", v.ID, "state", v.Status)
 				continue
 			}
-			if v.Status == "ACTIVE" {
+			switch v.Status {
+			case "ACTIVE":
 				ready += 1
+			case "BUILD", "REBOOT", "HARD_REBOOT":
+				// normal state transition, don't log but we need to wait
+			default:
+				t.logger.Warn("Detected server in unexpected status", "id", v.ID, "state", v.Status)
 			}
-			azDist[v.AZ] = azDist[v.AZ] + 1
 
+			azDist[v.AZ] = azDist[v.AZ] + 1
 			remoteIDs = append(remoteIDs, idFn(v))
 			total += 1
 		}
