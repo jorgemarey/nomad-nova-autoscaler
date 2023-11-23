@@ -50,10 +50,11 @@ const (
 
 	configKeyValueSeparator = "value_separator"
 	configKeyActionTimeout  = "action_timeout"
+	configKeyScaleTimeout   = "scale_timeout"
+	configKeyStatusTimeout  = "status_timeout"
 	configKeyIgnoredStates  = "ignored_states"
-
-	configKeyStopFirst   = "stop_first"
-	configKeyForceDelete = "force_delete"
+	configKeyStopFirst      = "stop_first"
+	configKeyForceDelete    = "force_delete"
 )
 
 var (
@@ -75,11 +76,15 @@ type TargetPlugin struct {
 	imageClient   *gophercloud.ServiceClient
 	networkClient *gophercloud.ServiceClient
 
-	idMapper      bool
-	avZones       []string
-	cache         map[string]string
-	actionTimeout int // seconds
-	ignoredStates map[string]struct{}
+	idMapper          bool
+	avZones           []string
+	cache             map[string]string
+	actionTimeout     time.Duration
+	scaleTimeout      time.Duration
+	statusTimeout     time.Duration
+	stopBeforeDestroy bool
+	forceDelete       bool
+	ignoredStates     map[string]struct{}
 
 	// clusterUtils provides general cluster scaling utilities for querying the
 	// state of nodes pools and performing scaling tasks.
@@ -126,8 +131,27 @@ func (t *TargetPlugin) configurePlugin(config map[string]string) error {
 		if err != nil {
 			return fmt.Errorf("failed to parse action_timeout: %v", err)
 		}
-		t.actionTimeout = int(d.Seconds())
+		t.actionTimeout = d
 	}
+	t.scaleTimeout = defaultScaleTimeout
+	if timeout, ok := config[configKeyScaleTimeout]; ok {
+		d, err := time.ParseDuration(timeout)
+		if err != nil {
+			return fmt.Errorf("failed to parse scale_timeout: %v", err)
+		}
+		t.scaleTimeout = d
+	}
+	t.statusTimeout = defaultStatusTImeout
+	if timeout, ok := config[configKeyStatusTimeout]; ok {
+		d, err := time.ParseDuration(timeout)
+		if err != nil {
+			return fmt.Errorf("failed to parse status_timeout: %v", err)
+		}
+		t.statusTimeout = d
+	}
+
+	t.stopBeforeDestroy = config[configKeyStopFirst] != ""
+	t.forceDelete = config[configKeyForceDelete] != ""
 
 	t.ignoredStates = make(map[string]struct{})
 	if states, ok := config[configKeyIgnoredStates]; ok && strings.TrimSpace(states) != "" {
@@ -163,7 +187,8 @@ func (t *TargetPlugin) Scale(action sdk.ScalingAction, config map[string]string)
 		return fmt.Errorf("required config param %s not found", configKeyPoolName)
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), t.scaleTimeout)
+	defer cancel()
 	total, _, azDist, remoteIDs, err := t.countServers(ctx, pool)
 	if err != nil {
 		return fmt.Errorf("failed to count Nova servers: %v", err)
@@ -207,7 +232,8 @@ func (t *TargetPlugin) Status(config map[string]string) (*sdk.TargetStatus, erro
 		return nil, fmt.Errorf("required config param %s not found", configKeyPoolName)
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), t.statusTimeout)
+	defer cancel()
 	total, active, _, _, err := t.countServers(ctx, pool)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count Nova servers: %v", err)

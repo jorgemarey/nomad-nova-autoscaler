@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -31,7 +30,9 @@ const (
 )
 
 const (
-	defaultActionTimeout        = 90 // Seconds
+	defaultActionTimeout        = 120 * time.Second
+	defaultStatusTImeout        = 5 * time.Minute
+	defaultScaleTimeout         = 2 * time.Hour
 	poolTag                     = "na_pool:%s"
 	defaultConfigValueSeparator = ","
 	configKVSeparator           = "="
@@ -92,7 +93,7 @@ func (t *TargetPlugin) configureTLS(provider *gophercloud.ProviderClient, config
 	var tlsConfig *tls.Config
 
 	if certFile, ok := config[configKeyCACertFile]; ok {
-		caCert, err := ioutil.ReadFile(certFile)
+		caCert, err := os.ReadFile(certFile)
 		if err != nil {
 			return err
 		}
@@ -249,13 +250,11 @@ func (t *TargetPlugin) scaleIn(ctx context.Context, count int64, remoteIDs []str
 	// Delete the instances from the Managed Instance Groups. The targetSize of the MIG is will be reduced by the
 	// number of instances that are deleted.
 	log.Debug("deleting OS Nova instances")
-
 	stopFirst := config[configKeyStopFirst] != ""
 	forceDelete := config[configKeyForceDelete] != ""
 	if err := t.deleteServers(ctx, pool, stopFirst, forceDelete, instanceIDs); err != nil {
 		return fmt.Errorf("failed to delete instances: %v", err)
 	}
-
 	log.Info("successfully deleted OS Nova instances")
 
 	// Run any post scale in tasks that are desired.
@@ -302,13 +301,15 @@ func (t *TargetPlugin) createServer(ctx context.Context, common *commonCreateDat
 	}
 
 	t.logger.Debug("creating instances")
-	server, err := servers.Create(t.computeClient, opts).Extract()
+	ctx, cancel := context.WithTimeout(ctx, t.actionTimeout)
+	defer cancel()
+	server, err := servers.CreateWithContext(ctx, t.computeClient, opts).Extract()
 	if err != nil {
 		return fmt.Errorf("failed to create server: %s", err)
 	}
 
 	t.logger.Debug("waiting for active status", "server", server.ID)
-	if err := servers.WaitForStatus(t.computeClient, server.ID, "ACTIVE", t.actionTimeout); err != nil {
+	if err := servers.WaitForStatus(t.computeClient, server.ID, "ACTIVE", int(t.actionTimeout.Seconds())); err != nil {
 		return fmt.Errorf("error waiting for server id %s to get to ACTIVE status: %v", server.ID, err)
 	}
 
@@ -333,7 +334,7 @@ func (t *TargetPlugin) deleteServers(ctx context.Context, pool string, stopFirst
 	}
 
 	pager := servers.List(t.computeClient, servers.ListOpts{Tags: fmt.Sprintf(poolTag, pool)})
-	err := pager.EachPage(func(page pagination.Page) (bool, error) {
+	err := pager.EachPageWithContext(ctx, func(page pagination.Page) (bool, error) {
 		serverList, err := servers.ExtractServers(page)
 		if err != nil {
 			return false, err
@@ -363,31 +364,35 @@ func (t *TargetPlugin) deleteServers(ctx context.Context, pool string, stopFirst
 func (t *TargetPlugin) deleteServer(ctx context.Context, stopFirst, forceDelete bool, instanceID string) error {
 	log := t.logger.With("action", "delete", "instance_id", instanceID)
 
-	if stopFirst {
+	if t.stopBeforeDestroy || stopFirst {
 		log.Debug("stopping instance")
-		if err := startstop.Stop(t.computeClient, instanceID).ExtractErr(); err != nil {
+		ctx, cancel := context.WithTimeout(ctx, t.actionTimeout)
+		defer cancel()
+		if err := startstop.StopWithContext(ctx, t.computeClient, instanceID).ExtractErr(); err != nil {
 			return fmt.Errorf("failed to stop server id %s: %v", instanceID, err)
 		}
 		log.Debug("waiting for shutoff status")
-		if err := servers.WaitForStatus(t.computeClient, instanceID, "SHUTOFF", t.actionTimeout); err != nil {
+		if err := servers.WaitForStatus(t.computeClient, instanceID, "SHUTOFF", int(t.actionTimeout.Seconds())); err != nil {
 			return fmt.Errorf("error waiting for server id %s to get to SHUTOFF status: %v", instanceID, err)
 		}
 		log.Debug("instance shutoff completed")
 	}
 
 	log.Debug("deleting instance")
-	if forceDelete {
-		if err := servers.ForceDelete(t.computeClient, instanceID).ExtractErr(); err != nil {
+	ctx, cancel := context.WithTimeout(ctx, t.actionTimeout)
+	defer cancel()
+	if t.forceDelete || forceDelete {
+		if err := servers.ForceDeleteWithContext(ctx, t.computeClient, instanceID).ExtractErr(); err != nil {
 			return fmt.Errorf("failed to delete server id %s: %v", instanceID, err)
 		}
 	} else {
-		if err := servers.Delete(t.computeClient, instanceID).ExtractErr(); err != nil {
+		if err := servers.DeleteWithContext(ctx, t.computeClient, instanceID).ExtractErr(); err != nil {
 			return fmt.Errorf("failed to delete server id %s: %v", instanceID, err)
 		}
 	}
 	log.Debug("waiting for instance deletion")
-	if err := gophercloud.WaitFor(t.actionTimeout, func() (bool, error) {
-		current, err := servers.Get(t.computeClient, instanceID).Extract()
+	if err := gophercloud.WaitFor(int(t.actionTimeout.Seconds()), func() (bool, error) {
+		current, err := servers.GetWithContext(ctx, t.computeClient, instanceID).Extract()
 		if err != nil {
 			if _, ok := err.(gophercloud.ErrDefault404); ok {
 				return true, nil
@@ -431,7 +436,7 @@ func (t *TargetPlugin) countServers(ctx context.Context, pool string) (int64, in
 	}
 
 	pager := servers.List(t.computeClient, servers.ListOpts{Tags: fmt.Sprintf(poolTag, pool)})
-	err := pager.EachPage(func(page pagination.Page) (bool, error) {
+	err := pager.EachPageWithContext(ctx, func(page pagination.Page) (bool, error) {
 		var serverList []customServer
 		if err := servers.ExtractServersInto(page, &serverList); err != nil {
 			return false, err

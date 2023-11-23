@@ -1,3 +1,13 @@
+## 0.4.0 (Nov 23, 2023)
+
+FEATURES:
+* Updated golang 1.21.3
+* Updated gophercloud to 1.7.1 (this is using a fork to pass a context to requests)
+* Now all requests are bound to a default action_timeout of 120 seconds
+* Set a default timeout of 5 minutes on the Status method
+* Allow configuring a scale and status timeouts. Defaults are 5m to Status and 2h for Scale
+* stop_first and force_destroy can now be specified in plugin configuration
+
 ## 0.3.0 (Sep 6, 2022)
 
 NOTES:

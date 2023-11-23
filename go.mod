@@ -1,15 +1,17 @@
 module github.com/jorgemarey/nomad-nova-autoscaler
 
-go 1.17
+go 1.21
 
 require (
-	github.com/gophercloud/gophercloud v0.21.0
-	github.com/gophercloud/utils v0.0.0-20210909165623-d7085207ff6d
+	github.com/gophercloud/gophercloud v1.7.0
+	github.com/gophercloud/utils v0.0.0-20231010081019-80377eca5d56
 	github.com/hashicorp/go-hclog v0.16.2
 	github.com/hashicorp/nomad-autoscaler v0.3.6
 	github.com/hashicorp/nomad/api v0.0.0-20210503143957-4ccada7924cf
 	github.com/stretchr/testify v1.6.1
 )
+
+replace github.com/gophercloud/gophercloud v1.7.0 => github.com/jorgemarey/gophercloud v1.7.2
 
 require (
 	github.com/agext/levenshtein v1.2.3 // indirect
@@ -43,9 +45,9 @@ require (
 	github.com/oklog/run v1.0.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/zclconf/go-cty v1.8.2 // indirect
-	golang.org/x/net v0.0.0-20210226172049-e18ecbb05110 // indirect
-	golang.org/x/sys v0.0.0-20210426230700-d19ff857e887 // indirect
-	golang.org/x/text v0.3.6 // indirect
+	golang.org/x/net v0.0.0-20220722155237-a158d28d115b // indirect
+	golang.org/x/sys v0.2.0 // indirect
+	golang.org/x/text v0.4.0 // indirect
 	google.golang.org/genproto v0.0.0-20210119180700-e258113e47cc // indirect
 	google.golang.org/grpc v1.35.0 // indirect
 	google.golang.org/protobuf v1.25.0 // indirect
