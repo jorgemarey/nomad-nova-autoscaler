@@ -31,19 +31,20 @@ const (
 
 	configKeyNodeIDAttr = "id_attribute"
 
-	configKeyName        = "name"
-	configKeyNamePrefix  = "name_prefix"
-	configKeyPoolName    = "pool_name"
-	configKeyImageID     = "image_id"
-	configKeyImageName   = "image_name"
-	configKeyFlavorID    = "flavor_id"
-	configKeyFlavorName  = "flavor_name"
-	configKeyAvZones     = "availavility_zones" // default is to leave AZ blank for nova to fill
-	configKeyESAZ        = "evenly_split_azs"
-	configKeyNetworkID   = "network_id"
-	configKeyNetworkName = "network_name"
-	configKeySGNames     = "security_groups" // comma separated values
-	configKeyUserDataT   = "user_data_template"
+	configKeyName           = "name"
+	configKeyNamePrefix     = "name_prefix"
+	configKeyPoolName       = "pool_name"
+	configKeyImageID        = "image_id"
+	configKeyImageName      = "image_name"
+	configKeyFlavorID       = "flavor_id"
+	configKeyFlavorName     = "flavor_name"
+	configKeyAvZones        = "availavility_zones" // default is to leave AZ blank for nova to fill
+	configKeyESAZ           = "evenly_split_azs"
+	configKeyNetworkID      = "network_id"
+	configKeyNetworkName    = "network_name"
+	configKeyFloatingIPPool = "floatingip_pool_name"
+	configKeySGNames        = "security_groups" // comma separated values
+	configKeyUserDataT      = "user_data_template"
 	// TODO: configKeyServerGroup = "server_group"
 	configKeyMetadata = "metadata" // comma separated k=v values
 	configKeyTags     = "tags"     // comma separated values
@@ -79,6 +80,7 @@ type TargetPlugin struct {
 	idMapper          bool
 	avZones           []string
 	cache             map[string]string
+	fipIDs            map[string]string
 	actionTimeout     time.Duration
 	scaleTimeout      time.Duration
 	statusTimeout     time.Duration

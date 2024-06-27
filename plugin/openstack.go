@@ -14,9 +14,13 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/compute/apiversions"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/attachinterfaces"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/availabilityzones"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/startstop"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
+	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/external"
+	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/layer3/floatingips"
+	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/pagination"
 	flavorutils "github.com/gophercloud/utils/openstack/compute/v2/flavors"
 	imageutils "github.com/gophercloud/utils/openstack/imageservice/v2/images"
@@ -26,7 +30,7 @@ import (
 )
 
 const (
-	version = "v0.2.5"
+	version = "v0.4.1"
 )
 
 const (
@@ -42,7 +46,12 @@ const (
 // setupOSClients takes the passed config mapping and instantiates the
 // required OS service clients.
 func (t *TargetPlugin) setupOSClients(config map[string]string) error {
-	t.cache = make(map[string]string)
+	if t.cache == nil {
+		t.cache = make(map[string]string)
+	}
+	if t.fipIDs == nil {
+		t.fipIDs = make(map[string]string)
+	}
 
 	// use env vars but don't fail if not all are provided
 	ao, _ := openstack.AuthOptionsFromEnv()
@@ -297,7 +306,7 @@ func (t *TargetPlugin) createServers(ctx context.Context, count int, azDist map[
 func (t *TargetPlugin) createServer(ctx context.Context, common *commonCreateData, custom *customCreateData) error {
 	opts, err := dataToCreateOpts(common, custom)
 	if err != nil {
-		return fmt.Errorf("failed to initialize server options: %s", err)
+		return fmt.Errorf("failed to initialize server options: %w", err)
 	}
 
 	t.logger.Debug("creating instances")
@@ -305,16 +314,21 @@ func (t *TargetPlugin) createServer(ctx context.Context, common *commonCreateDat
 	defer cancel()
 	server, err := servers.CreateWithContext(ctx, t.computeClient, opts).Extract()
 	if err != nil {
-		return fmt.Errorf("failed to create server: %s", err)
+		return fmt.Errorf("failed to create server: %w", err)
 	}
 
 	t.logger.Debug("waiting for active status", "server", server.ID)
 	if err := servers.WaitForStatus(t.computeClient, server.ID, "ACTIVE", int(t.actionTimeout.Seconds())); err != nil {
-		return fmt.Errorf("error waiting for server id %s to get to ACTIVE status: %v", server.ID, err)
+		return fmt.Errorf("error waiting for server id %s to get to ACTIVE status: %w", server.ID, err)
 	}
+	t.logger.Debug("instance boot up completed")
 
-	t.logger.Debug("instances boot up completed")
-
+	if fipPool := common.floatingIPPool; fipPool != "" {
+		if err := t.createAndAttachFloatingIP(ctx, fipPool, server); err != nil {
+			return fmt.Errorf("error while adding floating-ip to server %s: %w", server.ID, err)
+		}
+		t.logger.Debug("floating-ip attached to server")
+	}
 	return nil
 }
 
@@ -408,6 +422,31 @@ func (t *TargetPlugin) deleteServer(ctx context.Context, stopFirst, forceDelete 
 		return fmt.Errorf("error waiting for server id %s to get to DELETED status: %v", instanceID, err)
 	}
 	log.Debug("instance deletion completed")
+
+	if fipID, ok := t.fipIDs[instanceID]; ok {
+		delete(t.fipIDs, instanceID)
+		if err := floatingips.Delete(t.networkClient, fipID).ExtractErr(); err != nil {
+			return fmt.Errorf("error deleting floating ip for server %s: %w", instanceID, err)
+		}
+		log.Debug("instance floating-ip deleted")
+	}
+	return nil
+}
+
+func (t *TargetPlugin) createAndAttachFloatingIP(_ context.Context, networkID string, server *servers.Server) error {
+	log := t.logger.With("action", "attach_floating", "instance_id", server.ID)
+	portID, err := t.getInstancePortID(server.ID)
+	if err != nil {
+		return fmt.Errorf("error getting instance port ID: %w", err)
+	}
+
+	var fip floatingips.FloatingIP
+	if err := floatingips.Create(t.networkClient, floatingips.CreateOpts{FloatingNetworkID: networkID, PortID: portID}).ExtractInto(&fip); err != nil {
+		return fmt.Errorf("error creating floating ip for server %s: %w", server.ID, err)
+	}
+	t.fipIDs[server.ID] = fip.ID
+
+	log.Debug("created floating ip")
 	return nil
 }
 
@@ -479,6 +518,7 @@ type commonCreateData struct {
 	flavorID           string
 	securityGroups     []string
 	networkUUID        string
+	floatingIPPool     string
 	availabilityZones  []string
 	evenlydistributeAZ bool
 	userDataTemplate   string
@@ -520,6 +560,14 @@ func (t *TargetPlugin) getCreateData(ctx context.Context, config map[string]stri
 		return nil, err
 	}
 	data.networkUUID = networkID
+
+	if fipPoolName, ok := config[configKeyFloatingIPPool]; ok && strings.TrimSpace(fipPoolName) != "" {
+		networkID, err := t.getFloatingIPNetworkIDByName(fipPoolName)
+		if err != nil {
+			return nil, fmt.Errorf("error getting floating network ID: %w", err)
+		}
+		data.floatingIPPool = networkID
+	}
 
 	if sgNames, ok := config[configKeySGNames]; ok && strings.TrimSpace(sgNames) != "" {
 		sgs := strings.Split(strings.TrimSpace(sgNames), configValueSeparator)
@@ -571,7 +619,7 @@ type flavorInfo struct {
 	flavorID string
 }
 
-func (t *TargetPlugin) getFlavorInfo(ctx context.Context, config map[string]string) (*flavorInfo, error) {
+func (t *TargetPlugin) getFlavorInfo(_ context.Context, config map[string]string) (*flavorInfo, error) {
 	if id, ok := config[configKeyFlavorID]; ok {
 		return &flavorInfo{flavorID: id}, nil
 	}
@@ -597,7 +645,7 @@ func (t *TargetPlugin) getFlavorInfo(ctx context.Context, config map[string]stri
 	return &flavorInfo{flavorID: flavorID}, nil
 }
 
-func (t *TargetPlugin) getImageID(ctx context.Context, config map[string]string) (string, error) {
+func (t *TargetPlugin) getImageID(_ context.Context, config map[string]string) (string, error) {
 	if id, ok := config[configKeyImageID]; ok {
 		return id, nil
 	}
@@ -623,7 +671,7 @@ func (t *TargetPlugin) getImageID(ctx context.Context, config map[string]string)
 	return imageID, nil
 }
 
-func (t *TargetPlugin) getNetworkID(ctx context.Context, config map[string]string) (string, error) {
+func (t *TargetPlugin) getNetworkID(_ context.Context, config map[string]string) (string, error) {
 	if id, ok := config[configKeyNetworkID]; ok {
 		return id, nil
 	}
@@ -647,6 +695,49 @@ func (t *TargetPlugin) getNetworkID(ctx context.Context, config map[string]strin
 
 	t.cache[key] = networkID
 	return networkID, nil
+}
+
+func (t *TargetPlugin) getFloatingIPNetworkIDByName(poolName string) (string, error) {
+	var externalNetworks []struct {
+		networks.Network
+		external.NetworkExternalExt
+	}
+
+	allPages, err := networks.List(t.networkClient, networks.ListOpts{
+		Name: poolName,
+	}).AllPages()
+	if err != nil {
+		return "", err
+	}
+
+	if err := networks.ExtractNetworksInto(allPages, &externalNetworks); err != nil {
+		return "", err
+	}
+
+	if len(externalNetworks) == 0 {
+		return "", fmt.Errorf("can't find external network %s", poolName)
+	}
+	// Check and return the first external network.
+	if !externalNetworks[0].External {
+		return "", fmt.Errorf("network %s is not external", poolName)
+	}
+	return externalNetworks[0].ID, nil
+}
+
+func (t *TargetPlugin) getInstancePortID(id string) (string, error) {
+	interfacesPage, err := attachinterfaces.List(t.computeClient, id).AllPages()
+	if err != nil {
+		return "", err
+	}
+	interfaces, err := attachinterfaces.ExtractInterfaces(interfacesPage)
+	if err != nil {
+		return "", err
+	}
+	if len(interfaces) == 0 {
+		return "", fmt.Errorf("instance '%s' has no interfaces", id)
+	}
+
+	return interfaces[0].PortID, nil
 }
 
 // osNovaNodeIDMapBuilder is used to identify the Opensack Nova ID of a Nomad node using
