@@ -90,6 +90,7 @@ If no zones are provided, and none are discovered, a random one will be asigned 
 * `evenly_split_azs` `(string: "")` - Set this to any value other than blank to try to balance the instances over the provided AZs when creating/destroying
 * `network_id` `(string: "")` - The network ID where to lauch the servers
 * `network_name` `(string: "")` - The network name to use. One of `network_id` or `network_name` must be set
+* `floatingip_pool_name` `(string: "")` - The floating ip network name to use. If this is specified a new floating ip will be allocated and attached to every created instance
 * `security_groups` `(string: "")` - A comma-separated list of SG names to provide on creation
 * `user_data_template` `(string: "")` - The path to a file containing the user data for the instance creation. This will be treated as a golang
 template, so {{ }} characters will be executed. `.Name`, `.AZ`, `.RandomUUID` and `.PoolName` can be used

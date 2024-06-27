@@ -1,3 +1,11 @@
+## 0.4.1 (Jun 27, 2024)
+
+FEATURES:
+* Updated golang to 1.22.4
+* Updated autoscaler dependendy to 0.4.4
+* floatingip_pool_name can now be specified to attach a floating ip for created instances
+* fix cache data being renoved after reload
+
 ## 0.4.0 (Nov 23, 2023)
 
 FEATURES:
