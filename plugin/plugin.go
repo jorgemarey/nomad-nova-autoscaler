@@ -29,7 +29,8 @@ const (
 	configKeyCACertFile  = "cacert_file"
 	configKeyInsecure    = "insecure_skip_verify"
 
-	configKeyNodeIDAttr = "id_attribute"
+	configKeyNodeIDAttr   = "id_attribute"
+	configKeyNodeNameAttr = "name_attribute"
 
 	configKeyName           = "name"
 	configKeyNamePrefix     = "name_prefix"
@@ -120,7 +121,7 @@ func (t *TargetPlugin) SetConfig(config map[string]string) error {
 
 	// Store and set the remote ID callback function.
 	t.clusterUtils = clusterUtils
-	t.clusterUtils.ClusterNodeIDLookupFunc = osNovaNodeIDMapBuilder(config[configKeyNodeIDAttr])
+	t.clusterUtils.ClusterNodeIDLookupFunc = osNovaNodeIDMapBuilder(config[configKeyNodeNameAttr], config[configKeyNodeIDAttr])
 	t.idMapper = config[configKeyNodeIDAttr] != ""
 
 	return nil

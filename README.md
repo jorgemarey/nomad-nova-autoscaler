@@ -37,8 +37,8 @@ target "os-nova" {
 * `cacert_file` `(string: "")` - Location of the certificate to use for OS APIs verification
 * `insecure_skip_verify` `(string: "")` - Skip TLS certificate verification
 
-* `id_attribute` `(string: "")` - The nomad attribute to use that maps the nomad client to an OS Compute instance. By default `unique.platform.aws.hostname` is used and a previous search is needed
-to get the instance id using the instance name
+* `name_attribute` `(string: "unique.platform.aws.hostname")` - The nomad attribute that reflects the instance name. This needs to be used for searching the instance ID in the proccess of downscaling
+* `id_attribute` `(string: "")` - The nomad attribute to use that maps the nomad client to an OS Compute instance. If not specified then a previous search is needed to get the instance id using the instance name using `name_attribute`. If this is specified it takes priority over `name_attribute`
 * `action_timeout` `(string: "")` - The timeout to use when performing create and delete actions over servers. This should be specified as a duration. The default vaule is 90s
 * `ignored_states` `(string: "")` - A comma-separated list of server states to be ignored. The complete list can be seen [here](https://docs.openstack.org/api-guide/compute/server_concepts.html)
 
