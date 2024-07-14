@@ -30,13 +30,14 @@ import (
 )
 
 const (
-	version = "v0.4.1"
+	version = "v0.4.2"
 )
 
 const (
 	defaultActionTimeout        = 120 * time.Second
 	defaultStatusTImeout        = 5 * time.Minute
 	defaultScaleTimeout         = 2 * time.Hour
+	defaultNameProperty         = "unique.platform.aws.hostname"
 	poolTag                     = "na_pool:%s"
 	defaultConfigValueSeparator = ","
 	configKVSeparator           = "="
@@ -742,10 +743,14 @@ func (t *TargetPlugin) getInstancePortID(id string) (string, error) {
 
 // osNovaNodeIDMapBuilder is used to identify the Opensack Nova ID of a Nomad node using
 // the relevant attribute value.
-func osNovaNodeIDMapBuilder(property string) scaleutils.ClusterNodeIDLookupFunc {
+func osNovaNodeIDMapBuilder(nameProperty, idProperty string) scaleutils.ClusterNodeIDLookupFunc {
 	var isMeta bool
-	if property == "" {
-		property = "unique.platform.aws.hostname"
+	property := defaultNameProperty
+	if nameProperty != "" {
+		property = nameProperty
+	}
+	if idProperty != "" {
+		property = idProperty
 	}
 	if strings.HasPrefix(property, "meta.") {
 		isMeta = true

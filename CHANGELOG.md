@@ -1,9 +1,15 @@
+## 0.4.2 (Jul 15, 2024)
+
+FEATURES:
+* Add `name_attribute` to specify the attribute to use when selecting the instance name to 
+search for the instance to downscale
+
 ## 0.4.1 (Jun 27, 2024)
 
 FEATURES:
 * Updated golang to 1.22.4
 * Updated autoscaler dependendy to 0.4.4
-* floatingip_pool_name can now be specified to attach a floating ip for created instances
+* `floatingip_pool_name` can now be specified to attach a floating ip for created instances
 * fix cache data being renoved after reload
 
 ## 0.4.0 (Nov 23, 2023)
