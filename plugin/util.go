@@ -7,7 +7,7 @@ import (
 	"sort"
 	"text/template"
 
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 )
 
 const (
@@ -62,8 +62,8 @@ type templateData struct {
 	PoolName        string
 }
 
-func dataToCreateOpts(common *commonCreateData, custom *customCreateData) (servers.CreateOpts, error) {
-	opts := servers.CreateOpts{
+func dataToCreateOpts(common *commonCreateData, custom *customCreateData) (servers.CreateOpts, servers.SchedulerHintOpts, error) {
+	createOpts := servers.CreateOpts{
 		Name:           common.name,
 		ImageRef:       common.imageID,
 		FlavorRef:      common.flavorID,
@@ -71,23 +71,27 @@ func dataToCreateOpts(common *commonCreateData, custom *customCreateData) (serve
 		Metadata:       common.metadata,
 		Tags:           common.tags,
 	}
-	if common.networkUUID != "" {
-		opts.Networks = []servers.Network{{UUID: common.networkUUID}}
+	schedOpts := servers.SchedulerHintOpts{
+		Group: common.serverGroupID,
+	}
+
+	if common.networkID != "" {
+		createOpts.Networks = []servers.Network{{UUID: common.networkID}}
 	}
 
 	if custom.name != "" {
-		opts.Name = custom.name
+		createOpts.Name = custom.name
 	}
 	if custom.availabilityzone != "" {
-		opts.AvailabilityZone = custom.availabilityzone
+		createOpts.AvailabilityZone = custom.availabilityzone
 	}
 
-	opts.Tags = append(opts.Tags, fmt.Sprintf(poolTag, common.pool))
+	createOpts.Tags = append(createOpts.Tags, fmt.Sprintf(poolTag, common.pool))
 
 	if common.userDataTemplate != "" {
 		template, err := template.ParseFiles(common.userDataTemplate)
 		if err != nil {
-			return opts, fmt.Errorf("error parsing template file %s: %s", common.userDataTemplate, err)
+			return createOpts, schedOpts, fmt.Errorf("error parsing template file %s: %s", common.userDataTemplate, err)
 		}
 
 		td := templateData{
@@ -102,12 +106,12 @@ func dataToCreateOpts(common *commonCreateData, custom *customCreateData) (serve
 
 		buf := new(bytes.Buffer)
 		if err := template.Execute(buf, td); err != nil {
-			return opts, fmt.Errorf("error executing template file %s: %s", common.userDataTemplate, err)
+			return createOpts, schedOpts, fmt.Errorf("error executing template file %s: %s", common.userDataTemplate, err)
 		}
-		opts.UserData = buf.Bytes()
+		createOpts.UserData = buf.Bytes()
 	}
 
-	return opts, nil
+	return createOpts, schedOpts, nil
 }
 
 func generateUUID() string {
