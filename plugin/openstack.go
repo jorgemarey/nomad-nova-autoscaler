@@ -11,26 +11,25 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/openstack"
-	"github.com/gophercloud/gophercloud/openstack/compute/apiversions"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/attachinterfaces"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/availabilityzones"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/startstop"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/external"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/layer3/floatingips"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
-	"github.com/gophercloud/gophercloud/pagination"
-	flavorutils "github.com/gophercloud/utils/openstack/compute/v2/flavors"
-	imageutils "github.com/gophercloud/utils/openstack/imageservice/v2/images"
-	networkutils "github.com/gophercloud/utils/openstack/networking/v2/networks"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/apiversions"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/attachinterfaces"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/availabilityzones"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/external"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/layer3/floatingips"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
+	"github.com/gophercloud/gophercloud/v2/pagination"
+	flavorutils "github.com/gophercloud/utils/v2/openstack/compute/v2/flavors"
+	imageutils "github.com/gophercloud/utils/v2/openstack/image/v2/images"
+	networkutils "github.com/gophercloud/utils/v2/openstack/networking/v2/networks"
 	"github.com/hashicorp/nomad-autoscaler/sdk/helper/scaleutils"
 	"github.com/hashicorp/nomad/api"
 )
 
 const (
-	version = "v0.4.2"
+	version = "v0.5.0"
 )
 
 const (
@@ -46,7 +45,7 @@ const (
 
 // setupOSClients takes the passed config mapping and instantiates the
 // required OS service clients.
-func (t *TargetPlugin) setupOSClients(config map[string]string) error {
+func (t *TargetPlugin) setupOSClients(ctx context.Context, config map[string]string) error {
 	if t.cache == nil {
 		t.cache = make(map[string]string)
 	}
@@ -84,7 +83,7 @@ func (t *TargetPlugin) setupOSClients(config map[string]string) error {
 	if err := t.configureTLS(provider, config); err != nil {
 		return fmt.Errorf("failed configure TLS options: %v", err)
 	}
-	if err := openstack.Authenticate(provider, ao); err != nil {
+	if err := openstack.Authenticate(ctx, provider, ao); err != nil {
 		return fmt.Errorf("failed to authenticate with OS: %v", err)
 	}
 
@@ -92,8 +91,8 @@ func (t *TargetPlugin) setupOSClients(config map[string]string) error {
 		return err
 	}
 
-	t.getDefaultAvZones()
-	t.getCurrentMicroVersion(t.computeClient)
+	t.getDefaultAvZones(ctx)
+	t.getCurrentMicroVersion(ctx, t.computeClient)
 
 	t.logger.Info("completed set-up of plugin", "version", version)
 	return nil
@@ -146,7 +145,7 @@ func (t *TargetPlugin) configureClients(provider *gophercloud.ProviderClient, co
 	}
 	t.computeClient = computeClient
 
-	imageClient, err := openstack.NewImageServiceV2(provider, gophercloud.EndpointOpts{Region: regionName})
+	imageClient, err := openstack.NewImageV2(provider, gophercloud.EndpointOpts{Region: regionName})
 	if err != nil {
 		return fmt.Errorf("failed to create OS image client: %v", err)
 	}
@@ -162,8 +161,8 @@ func (t *TargetPlugin) configureClients(provider *gophercloud.ProviderClient, co
 	return nil
 }
 
-func (t *TargetPlugin) getDefaultAvZones() {
-	allPages, err := availabilityzones.List(t.computeClient).AllPages()
+func (t *TargetPlugin) getDefaultAvZones(ctx context.Context) {
+	allPages, err := availabilityzones.List(t.computeClient).AllPages(ctx)
 	if err != nil {
 		t.logger.Warn(fmt.Sprintf("failed to list nova availability zones: %s", err))
 		return
@@ -190,8 +189,8 @@ func (t *TargetPlugin) getDefaultAvZones() {
 	t.avZones = zones
 }
 
-func (t *TargetPlugin) getCurrentMicroVersion(client *gophercloud.ServiceClient) {
-	allPages, err := apiversions.List(client).AllPages()
+func (t *TargetPlugin) getCurrentMicroVersion(ctx context.Context, client *gophercloud.ServiceClient) {
+	allPages, err := apiversions.List(client).AllPages(ctx)
 	if err != nil {
 		t.logger.Warn(fmt.Sprintf("failed to list compute api versions: %s", err))
 		return
@@ -305,7 +304,7 @@ func (t *TargetPlugin) createServers(ctx context.Context, count int, azDist map[
 }
 
 func (t *TargetPlugin) createServer(ctx context.Context, common *commonCreateData, custom *customCreateData) error {
-	opts, err := dataToCreateOpts(common, custom)
+	createOpts, hintOpts, err := dataToCreateOpts(common, custom)
 	if err != nil {
 		return fmt.Errorf("failed to initialize server options: %w", err)
 	}
@@ -313,13 +312,13 @@ func (t *TargetPlugin) createServer(ctx context.Context, common *commonCreateDat
 	t.logger.Debug("creating instances")
 	ctx, cancel := context.WithTimeout(ctx, t.actionTimeout)
 	defer cancel()
-	server, err := servers.CreateWithContext(ctx, t.computeClient, opts).Extract()
+	server, err := servers.Create(ctx, t.computeClient, createOpts, hintOpts).Extract()
 	if err != nil {
 		return fmt.Errorf("failed to create server: %w", err)
 	}
 
 	t.logger.Debug("waiting for active status", "server", server.ID)
-	if err := servers.WaitForStatus(t.computeClient, server.ID, "ACTIVE", int(t.actionTimeout.Seconds())); err != nil {
+	if err := servers.WaitForStatus(ctx, t.computeClient, server.ID, "ACTIVE"); err != nil {
 		return fmt.Errorf("error waiting for server id %s to get to ACTIVE status: %w", server.ID, err)
 	}
 	t.logger.Debug("instance boot up completed")
@@ -349,7 +348,7 @@ func (t *TargetPlugin) deleteServers(ctx context.Context, pool string, stopFirst
 	}
 
 	pager := servers.List(t.computeClient, servers.ListOpts{Tags: fmt.Sprintf(poolTag, pool)})
-	err := pager.EachPageWithContext(ctx, func(page pagination.Page) (bool, error) {
+	err := pager.EachPage(ctx, func(ctx context.Context, page pagination.Page) (bool, error) {
 		serverList, err := servers.ExtractServers(page)
 		if err != nil {
 			return false, err
@@ -381,13 +380,13 @@ func (t *TargetPlugin) deleteServer(ctx context.Context, stopFirst, forceDelete 
 
 	if t.stopBeforeDestroy || stopFirst {
 		log.Debug("stopping instance")
-		ctx, cancel := context.WithTimeout(ctx, t.actionTimeout)
+		stopCtx, cancel := context.WithTimeout(ctx, t.actionTimeout)
 		defer cancel()
-		if err := startstop.StopWithContext(ctx, t.computeClient, instanceID).ExtractErr(); err != nil {
+		if err := servers.Stop(stopCtx, t.computeClient, instanceID).ExtractErr(); err != nil {
 			return fmt.Errorf("failed to stop server id %s: %v", instanceID, err)
 		}
 		log.Debug("waiting for shutoff status")
-		if err := servers.WaitForStatus(t.computeClient, instanceID, "SHUTOFF", int(t.actionTimeout.Seconds())); err != nil {
+		if err := servers.WaitForStatus(stopCtx, t.computeClient, instanceID, "SHUTOFF"); err != nil {
 			return fmt.Errorf("error waiting for server id %s to get to SHUTOFF status: %v", instanceID, err)
 		}
 		log.Debug("instance shutoff completed")
@@ -397,19 +396,19 @@ func (t *TargetPlugin) deleteServer(ctx context.Context, stopFirst, forceDelete 
 	ctx, cancel := context.WithTimeout(ctx, t.actionTimeout)
 	defer cancel()
 	if t.forceDelete || forceDelete {
-		if err := servers.ForceDeleteWithContext(ctx, t.computeClient, instanceID).ExtractErr(); err != nil {
+		if err := servers.ForceDelete(ctx, t.computeClient, instanceID).ExtractErr(); err != nil {
 			return fmt.Errorf("failed to delete server id %s: %v", instanceID, err)
 		}
 	} else {
-		if err := servers.DeleteWithContext(ctx, t.computeClient, instanceID).ExtractErr(); err != nil {
+		if err := servers.Delete(ctx, t.computeClient, instanceID).ExtractErr(); err != nil {
 			return fmt.Errorf("failed to delete server id %s: %v", instanceID, err)
 		}
 	}
 	log.Debug("waiting for instance deletion")
-	if err := gophercloud.WaitFor(int(t.actionTimeout.Seconds()), func() (bool, error) {
-		current, err := servers.GetWithContext(ctx, t.computeClient, instanceID).Extract()
+	if err := gophercloud.WaitFor(ctx, func(ctx context.Context) (bool, error) {
+		current, err := servers.Get(ctx, t.computeClient, instanceID).Extract()
 		if err != nil {
-			if _, ok := err.(gophercloud.ErrDefault404); ok {
+			if _, ok := err.(gophercloud.ErrResourceNotFound); ok {
 				return true, nil
 			}
 			return false, err
@@ -426,7 +425,7 @@ func (t *TargetPlugin) deleteServer(ctx context.Context, stopFirst, forceDelete 
 
 	if fipID, ok := t.fipIDs[instanceID]; ok {
 		delete(t.fipIDs, instanceID)
-		if err := floatingips.Delete(t.networkClient, fipID).ExtractErr(); err != nil {
+		if err := floatingips.Delete(ctx, t.networkClient, fipID).ExtractErr(); err != nil {
 			return fmt.Errorf("error deleting floating ip for server %s: %w", instanceID, err)
 		}
 		log.Debug("instance floating-ip deleted")
@@ -434,15 +433,15 @@ func (t *TargetPlugin) deleteServer(ctx context.Context, stopFirst, forceDelete 
 	return nil
 }
 
-func (t *TargetPlugin) createAndAttachFloatingIP(_ context.Context, networkID string, server *servers.Server) error {
+func (t *TargetPlugin) createAndAttachFloatingIP(ctx context.Context, networkID string, server *servers.Server) error {
 	log := t.logger.With("action", "attach_floating", "instance_id", server.ID)
-	portID, err := t.getInstancePortID(server.ID)
+	portID, err := t.getInstancePortID(ctx, server.ID)
 	if err != nil {
 		return fmt.Errorf("error getting instance port ID: %w", err)
 	}
 
 	var fip floatingips.FloatingIP
-	if err := floatingips.Create(t.networkClient, floatingips.CreateOpts{FloatingNetworkID: networkID, PortID: portID}).ExtractInto(&fip); err != nil {
+	if err := floatingips.Create(ctx, t.networkClient, floatingips.CreateOpts{FloatingNetworkID: networkID, PortID: portID}).ExtractInto(&fip); err != nil {
 		return fmt.Errorf("error creating floating ip for server %s: %w", server.ID, err)
 	}
 	t.fipIDs[server.ID] = fip.ID
@@ -476,7 +475,7 @@ func (t *TargetPlugin) countServers(ctx context.Context, pool string) (int64, in
 	}
 
 	pager := servers.List(t.computeClient, servers.ListOpts{Tags: fmt.Sprintf(poolTag, pool)})
-	err := pager.EachPageWithContext(ctx, func(page pagination.Page) (bool, error) {
+	err := pager.EachPage(ctx, func(ctx context.Context, page pagination.Page) (bool, error) {
 		var serverList []customServer
 		if err := servers.ExtractServersInto(page, &serverList); err != nil {
 			return false, err
@@ -517,8 +516,9 @@ type commonCreateData struct {
 	pool               string
 	imageID            string
 	flavorID           string
+	serverGroupID      string
 	securityGroups     []string
-	networkUUID        string
+	networkID          string
 	floatingIPPool     string
 	availabilityZones  []string
 	evenlydistributeAZ bool
@@ -534,6 +534,7 @@ func (t *TargetPlugin) getCreateData(ctx context.Context, config map[string]stri
 		pool:               config[configKeyPoolName],
 		userDataTemplate:   config[configKeyUserDataT],
 		evenlydistributeAZ: config[configKeyESAZ] != "",
+		serverGroupID:      config[configKeyServerGroupID],
 	}
 	configValueSeparator := defaultConfigValueSeparator
 	if sep, ok := config[configKeyValueSeparator]; ok && sep != "" {
@@ -560,10 +561,10 @@ func (t *TargetPlugin) getCreateData(ctx context.Context, config map[string]stri
 	if err != nil {
 		return nil, err
 	}
-	data.networkUUID = networkID
+	data.networkID = networkID
 
 	if fipPoolName, ok := config[configKeyFloatingIPPool]; ok && strings.TrimSpace(fipPoolName) != "" {
-		networkID, err := t.getFloatingIPNetworkIDByName(fipPoolName)
+		networkID, err := t.getFloatingIPNetworkIDByName(ctx, fipPoolName)
 		if err != nil {
 			return nil, fmt.Errorf("error getting floating network ID: %w", err)
 		}
@@ -620,7 +621,7 @@ type flavorInfo struct {
 	flavorID string
 }
 
-func (t *TargetPlugin) getFlavorInfo(_ context.Context, config map[string]string) (*flavorInfo, error) {
+func (t *TargetPlugin) getFlavorInfo(ctx context.Context, config map[string]string) (*flavorInfo, error) {
 	if id, ok := config[configKeyFlavorID]; ok {
 		return &flavorInfo{flavorID: id}, nil
 	}
@@ -636,7 +637,7 @@ func (t *TargetPlugin) getFlavorInfo(_ context.Context, config map[string]string
 	}
 
 	t.logger.Debug("searching for flavor", "name", flavorName)
-	flavorID, err := flavorutils.IDFromName(t.computeClient, flavorName)
+	flavorID, err := flavorutils.IDFromName(ctx, t.computeClient, flavorName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find flavor with name %s", flavorName)
 	}
@@ -646,7 +647,7 @@ func (t *TargetPlugin) getFlavorInfo(_ context.Context, config map[string]string
 	return &flavorInfo{flavorID: flavorID}, nil
 }
 
-func (t *TargetPlugin) getImageID(_ context.Context, config map[string]string) (string, error) {
+func (t *TargetPlugin) getImageID(ctx context.Context, config map[string]string) (string, error) {
 	if id, ok := config[configKeyImageID]; ok {
 		return id, nil
 	}
@@ -662,7 +663,7 @@ func (t *TargetPlugin) getImageID(_ context.Context, config map[string]string) (
 	}
 
 	t.logger.Debug("searching for image", "name", imageName)
-	imageID, err := imageutils.IDFromName(t.imageClient, imageName)
+	imageID, err := imageutils.IDFromName(ctx, t.imageClient, imageName)
 	if err != nil {
 		return "", fmt.Errorf("failed to find image with name %s: %s", imageName, err)
 	}
@@ -672,7 +673,7 @@ func (t *TargetPlugin) getImageID(_ context.Context, config map[string]string) (
 	return imageID, nil
 }
 
-func (t *TargetPlugin) getNetworkID(_ context.Context, config map[string]string) (string, error) {
+func (t *TargetPlugin) getNetworkID(ctx context.Context, config map[string]string) (string, error) {
 	if id, ok := config[configKeyNetworkID]; ok {
 		return id, nil
 	}
@@ -688,7 +689,7 @@ func (t *TargetPlugin) getNetworkID(_ context.Context, config map[string]string)
 	}
 
 	t.logger.Debug("searching for network", "name", networkName)
-	networkID, err := networkutils.IDFromName(t.networkClient, networkName)
+	networkID, err := networkutils.IDFromName(ctx, t.networkClient, networkName)
 	if err != nil {
 		return "", fmt.Errorf("failed to find network with name %s: %s", networkName, err)
 	}
@@ -698,7 +699,7 @@ func (t *TargetPlugin) getNetworkID(_ context.Context, config map[string]string)
 	return networkID, nil
 }
 
-func (t *TargetPlugin) getFloatingIPNetworkIDByName(poolName string) (string, error) {
+func (t *TargetPlugin) getFloatingIPNetworkIDByName(ctx context.Context, poolName string) (string, error) {
 	var externalNetworks []struct {
 		networks.Network
 		external.NetworkExternalExt
@@ -706,7 +707,7 @@ func (t *TargetPlugin) getFloatingIPNetworkIDByName(poolName string) (string, er
 
 	allPages, err := networks.List(t.networkClient, networks.ListOpts{
 		Name: poolName,
-	}).AllPages()
+	}).AllPages(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -725,8 +726,8 @@ func (t *TargetPlugin) getFloatingIPNetworkIDByName(poolName string) (string, er
 	return externalNetworks[0].ID, nil
 }
 
-func (t *TargetPlugin) getInstancePortID(id string) (string, error) {
-	interfacesPage, err := attachinterfaces.List(t.computeClient, id).AllPages()
+func (t *TargetPlugin) getInstancePortID(ctx context.Context, id string) (string, error) {
+	interfacesPage, err := attachinterfaces.List(t.computeClient, id).AllPages(ctx)
 	if err != nil {
 		return "", err
 	}
