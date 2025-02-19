@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gophercloud/gophercloud"
+	"github.com/gophercloud/gophercloud/v2"
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/nomad-autoscaler/plugins"
 	"github.com/hashicorp/nomad-autoscaler/plugins/base"
@@ -42,13 +42,13 @@ const (
 	configKeyAvZones        = "availavility_zones" // default is to leave AZ blank for nova to fill
 	configKeyESAZ           = "evenly_split_azs"
 	configKeyNetworkID      = "network_id"
+	configKeyServerGroupID  = "server_group_id"
 	configKeyNetworkName    = "network_name"
 	configKeyFloatingIPPool = "floatingip_pool_name"
 	configKeySGNames        = "security_groups" // comma separated values
 	configKeyUserDataT      = "user_data_template"
-	// TODO: configKeyServerGroup = "server_group"
-	configKeyMetadata = "metadata" // comma separated k=v values
-	configKeyTags     = "tags"     // comma separated values
+	configKeyMetadata       = "metadata" // comma separated k=v values
+	configKeyTags           = "tags"     // comma separated values
 
 	configKeyValueSeparator = "value_separator"
 	configKeyActionTimeout  = "action_timeout"
@@ -106,7 +106,8 @@ func NewOSNovaPlugin(log hclog.Logger) *TargetPlugin {
 func (t *TargetPlugin) SetConfig(config map[string]string) error {
 	t.config = config
 
-	if err := t.setupOSClients(config); err != nil {
+	ctx := context.Background()
+	if err := t.setupOSClients(ctx, config); err != nil {
 		return err
 	}
 

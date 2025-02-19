@@ -88,6 +88,7 @@ scaling "worker_pool_policy" {
 * `availavility_zones` `(string: "")` - The list of AZ that intances can be launched in. By default the plugin will search for all the available zones.
 If no zones are provided, and none are discovered, a random one will be asigned by Nova
 * `evenly_split_azs` `(string: "")` - Set this to any value other than blank to try to balance the instances over the provided AZs when creating/destroying
+* `server_group_id` `(string: "")` - The server group ID to use for the scheduler to place the server
 * `network_id` `(string: "")` - The network ID where to lauch the servers
 * `network_name` `(string: "")` - The network name to use. One of `network_id` or `network_name` must be set
 * `floatingip_pool_name` `(string: "")` - The floating ip network name to use. If this is specified a new floating ip will be allocated and attached to every created instance

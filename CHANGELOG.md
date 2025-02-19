@@ -1,3 +1,10 @@
+## 0.5.0 (Feb 13, 2025)
+
+Features:
+* Updated golang to 1.23.6
+* Updated gophercloud library to 2.5
+* Add `server_group_id` option to specify the server group to the nova scheduler for server placement
+
 ## 0.4.2 (Jul 15, 2024)
 
 FEATURES:
