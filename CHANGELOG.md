@@ -1,3 +1,9 @@
+## 0.5.1 (Mar 25, 2025)
+
+Features:
+* Updated nomad-autoscaler dependency to 0.4.6
+* Updated nomad dependency to 1.9.7
+
 ## 0.5.0 (Feb 13, 2025)
 
 Features:
