@@ -408,12 +408,12 @@ func (t *TargetPlugin) deleteServer(ctx context.Context, stopFirst, forceDelete 
 	if err := gophercloud.WaitFor(ctx, func(ctx context.Context) (bool, error) {
 		current, err := servers.Get(ctx, t.computeClient, instanceID).Extract()
 		if err != nil {
-			if _, ok := err.(gophercloud.ErrResourceNotFound); ok {
+			// If the server is not found, we can assume it was deleted successfully.
+			if isNotFound(err) {
 				return true, nil
 			}
 			return false, err
 		}
-
 		if current.Status == "DELETED" || current.Status == "SOFT_DELETED" {
 			return true, nil
 		}
@@ -448,6 +448,14 @@ func (t *TargetPlugin) createAndAttachFloatingIP(ctx context.Context, networkID 
 
 	log.Debug("created floating ip")
 	return nil
+}
+
+func isNotFound(err error) bool {
+	if _, ok := err.(gophercloud.ErrResourceNotFound); ok {
+		return true
+	}
+
+	return gophercloud.ResponseCodeIs(err, http.StatusNotFound)
 }
 
 type customServer struct {

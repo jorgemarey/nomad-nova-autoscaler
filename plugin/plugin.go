@@ -115,7 +115,8 @@ func (t *TargetPlugin) SetConfig(config map[string]string) error {
 		return err
 	}
 
-	clusterUtils, err := scaleutils.NewClusterScaleUtils(nomad.ConfigFromNamespacedMap(config), t.logger)
+	nomadConfig := nomad.ConfigFromNamespacedMap(config)
+	clusterUtils, err := scaleutils.NewClusterScaleUtils(nomadConfig, t.logger)
 	if err != nil {
 		return err
 	}
