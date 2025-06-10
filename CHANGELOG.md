@@ -2,6 +2,8 @@
 
 Features:
 * Added option to connect instance to loadbalancer
+* Updated golang to 1.24.3
+* Updated gophercloud library to 2.7
 
 Bug fixes:
 * Do not fail when a instance delete returns 404
