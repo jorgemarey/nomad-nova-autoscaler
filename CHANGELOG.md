@@ -1,3 +1,11 @@
+## 0.5.2 (Jun 10, 2025)
+
+Features:
+* Added option to connect instance to loadbalancer
+
+Bug fixes:
+* Do not fail when a instance delete returns 404
+
 ## 0.5.1 (Mar 25, 2025)
 
 Features:

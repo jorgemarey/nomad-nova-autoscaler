@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/attachinterfaces"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/availabilityzones"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
+	"github.com/gophercloud/gophercloud/v2/openstack/loadbalancer/v2/pools"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/external"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/layer3/floatingips"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
@@ -29,7 +31,7 @@ import (
 )
 
 const (
-	version = "v0.5.1"
+	version = "v0.5.2"
 )
 
 const (
@@ -51,6 +53,9 @@ func (t *TargetPlugin) setupOSClients(ctx context.Context, config map[string]str
 	}
 	if t.fipIDs == nil {
 		t.fipIDs = make(map[string]string)
+	}
+	if t.memberIDs == nil {
+		t.memberIDs = make(map[string]string)
 	}
 
 	// use env vars but don't fail if not all are provided
@@ -144,6 +149,7 @@ func (t *TargetPlugin) configureClients(provider *gophercloud.ProviderClient, co
 		return fmt.Errorf("failed to create OS compute client: %v", err)
 	}
 	t.computeClient = computeClient
+	t.computeClient.Microversion = "2.52"
 
 	imageClient, err := openstack.NewImageV2(provider, gophercloud.EndpointOpts{Region: regionName})
 	if err != nil {
@@ -157,7 +163,26 @@ func (t *TargetPlugin) configureClients(provider *gophercloud.ProviderClient, co
 	}
 	t.networkClient = networkClient
 
-	t.computeClient.Microversion = "2.52"
+	if id, ok := config[configKeyLBPoolID]; ok && id != "" {
+		t.lbPoolID = config[configKeyLBPoolID]
+		t.lbSubnetID = config[configKeyLBSubnetID]
+		port, ok := config[configKeyLBMemberPort]
+		if !ok || port == "" {
+			return fmt.Errorf("if 'lb_pool_id' is specified, required config param '%s'", configKeyLBMemberPort)
+		}
+		intPort, err := strconv.Atoi(port) // validate that the port is an integer
+		if err != nil {
+			return fmt.Errorf("invalid value for '%s': %v", configKeyLBMemberPort, err)
+		}
+		t.lbMemberPort = intPort
+
+		lbClient, err := openstack.NewLoadBalancerV2(provider, gophercloud.EndpointOpts{Region: regionName})
+		if err != nil {
+			return fmt.Errorf("failed to create OS load balancer client: %v", err)
+		}
+		t.lbClient = lbClient
+	}
+
 	return nil
 }
 
@@ -329,6 +354,13 @@ func (t *TargetPlugin) createServer(ctx context.Context, common *commonCreateDat
 		}
 		t.logger.Debug("floating-ip attached to server")
 	}
+	if t.lbPoolID != "" {
+		if err := t.attachToLoadBalancer(ctx, server); err != nil {
+			return fmt.Errorf("error while attaching server %s to load balancer: %w", server.ID, err)
+		}
+		t.logger.Debug("server attached to load balancer")
+	}
+
 	return nil
 }
 
@@ -378,6 +410,12 @@ func (t *TargetPlugin) deleteServers(ctx context.Context, pool string, stopFirst
 func (t *TargetPlugin) deleteServer(ctx context.Context, stopFirst, forceDelete bool, instanceID string) error {
 	log := t.logger.With("action", "delete", "instance_id", instanceID)
 
+	if t.lbPoolID != "" {
+		if err := t.detachFromLoadBalancer(ctx, instanceID); err != nil {
+			return fmt.Errorf("error while detaching server %s from load balancer: %w", instanceID, err)
+		}
+	}
+
 	if t.stopBeforeDestroy || stopFirst {
 		log.Debug("stopping instance")
 		stopCtx, cancel := context.WithTimeout(ctx, t.actionTimeout)
@@ -408,12 +446,12 @@ func (t *TargetPlugin) deleteServer(ctx context.Context, stopFirst, forceDelete 
 	if err := gophercloud.WaitFor(ctx, func(ctx context.Context) (bool, error) {
 		current, err := servers.Get(ctx, t.computeClient, instanceID).Extract()
 		if err != nil {
-			if _, ok := err.(gophercloud.ErrResourceNotFound); ok {
+			// If the server is not found, we can assume it was deleted successfully.
+			if isNotFound(err) {
 				return true, nil
 			}
 			return false, err
 		}
-
 		if current.Status == "DELETED" || current.Status == "SOFT_DELETED" {
 			return true, nil
 		}
@@ -448,6 +486,70 @@ func (t *TargetPlugin) createAndAttachFloatingIP(ctx context.Context, networkID 
 
 	log.Debug("created floating ip")
 	return nil
+}
+
+func (t *TargetPlugin) attachToLoadBalancer(ctx context.Context, server *servers.Server) error {
+	log := t.logger.With("action", "attach_to_lb", "instance_id", server.ID, "pool_id", t.lbPoolID)
+
+	member, err := pools.CreateMember(ctx, t.lbClient, t.lbPoolID, pools.CreateMemberOpts{
+		Address:      server.AccessIPv4,
+		Name:         server.ID,
+		ProtocolPort: t.lbMemberPort,
+		SubnetID:     t.lbSubnetID,
+	}).Extract()
+	if err != nil {
+		return fmt.Errorf("error creating load balancer member for server %s: %w", server.ID, err)
+	}
+	t.memberIDs[server.ID] = member.ID
+
+	log.Debug("created load balancer member")
+	return nil
+}
+
+func (t *TargetPlugin) detachFromLoadBalancer(ctx context.Context, instanceID string) error {
+	log := t.logger.With("action", "detach_from_lb", "instance_id", instanceID, "pool_id", t.lbPoolID)
+
+	var memberID string
+	if m := t.memberIDs[instanceID]; m != "" {
+		memberID = m
+	}
+	if memberID == "" {
+		pools.ListMembers(t.lbClient, t.lbPoolID, pools.ListMembersOpts{Name: instanceID}).EachPage(ctx, func(ctx context.Context, page pagination.Page) (bool, error) {
+			members, err := pools.ExtractMembers(page)
+			if err != nil {
+				return false, fmt.Errorf("error extracting load balancer members: %w", err)
+			}
+
+			for _, member := range members {
+				if member.Name == instanceID {
+					log.Debug("found load balancer member to delete", "member_id", member.ID)
+					memberID = member.ID
+					return false, nil // stop iterating through members
+				}
+			}
+			return true, nil
+		})
+	}
+	if memberID == "" {
+		log.Warn("no load balancer member found for server, skipping deletion")
+		return nil
+	}
+
+	if err := pools.DeleteMember(ctx, t.lbClient, t.lbPoolID, memberID).ExtractErr(); err != nil {
+		return fmt.Errorf("error deleting load balancer member for server %s: %w", instanceID, err)
+	}
+
+	delete(t.memberIDs, instanceID)
+	log.Debug("deleted load balancer member")
+	return nil
+}
+
+func isNotFound(err error) bool {
+	if _, ok := err.(gophercloud.ErrResourceNotFound); ok {
+		return true
+	}
+
+	return gophercloud.ResponseCodeIs(err, http.StatusNotFound)
 }
 
 type customServer struct {

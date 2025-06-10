@@ -49,6 +49,9 @@ const (
 	configKeyUserDataT      = "user_data_template"
 	configKeyMetadata       = "metadata" // comma separated k=v values
 	configKeyTags           = "tags"     // comma separated values
+	configKeyLBPoolID       = "lb_pool_id"
+	configKeyLBMemberPort   = "lb_member_port"
+	configKeyLBSubnetID     = "lb_subnet_id"
 
 	configKeyValueSeparator = "value_separator"
 	configKeyActionTimeout  = "action_timeout"
@@ -77,17 +80,22 @@ type TargetPlugin struct {
 	computeClient *gophercloud.ServiceClient
 	imageClient   *gophercloud.ServiceClient
 	networkClient *gophercloud.ServiceClient
+	lbClient      *gophercloud.ServiceClient
 
 	idMapper          bool
 	avZones           []string
 	cache             map[string]string
 	fipIDs            map[string]string
+	memberIDs         map[string]string
 	actionTimeout     time.Duration
 	scaleTimeout      time.Duration
 	statusTimeout     time.Duration
 	stopBeforeDestroy bool
 	forceDelete       bool
 	ignoredStates     map[string]struct{}
+	lbPoolID          string
+	lbMemberPort      int
+	lbSubnetID        string
 
 	// clusterUtils provides general cluster scaling utilities for querying the
 	// state of nodes pools and performing scaling tasks.
@@ -115,7 +123,8 @@ func (t *TargetPlugin) SetConfig(config map[string]string) error {
 		return err
 	}
 
-	clusterUtils, err := scaleutils.NewClusterScaleUtils(nomad.ConfigFromNamespacedMap(config), t.logger)
+	nomadConfig := nomad.ConfigFromNamespacedMap(config)
+	clusterUtils, err := scaleutils.NewClusterScaleUtils(nomadConfig, t.logger)
 	if err != nil {
 		return err
 	}
