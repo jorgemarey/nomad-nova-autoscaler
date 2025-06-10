@@ -31,7 +31,7 @@ import (
 )
 
 const (
-	version = "v0.5.2"
+	version = "v0.6.0"
 )
 
 const (
