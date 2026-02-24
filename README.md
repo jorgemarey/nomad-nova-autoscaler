@@ -78,6 +78,44 @@ scaling "worker_pool_policy" {
 }
 ```
 
+### Multiple Networks Example
+
+```hcl
+scaling "multi_network_pool_policy" {
+  # ...
+
+  policy {
+    # ...
+
+    target "os-nova" {
+      dry-run = false
+
+      evenly_split_azs   = true
+      stop_first         = true
+      image_name         = "myimage-v1"
+      flavor_name        = "t1.large"
+      pool_name          = "multi-net-pool"
+      name_prefix        = "multi-net-"
+      
+      # Multiple networks using network IDs
+      network_ids        = "c114a407-b11e-4b57-9c3e-5c461b91435a,d22e5f18-22c3-4a68-8d9e-6f44a7b8c99a"
+      
+      # Or using network names
+      # network_names     = "private-network,public-network"
+      
+      user_data_template = "user-data.gotxt"
+      security_groups    = "consul,nomad,default"
+
+      node_class                    = "wrkr-test"
+      node_drain_deadline           = "1h"
+      node_drain_ignore_system_jobs = false
+      node_purge                    = true
+      node_selector_strategy        = "least_busy"
+    }
+  }
+}
+```
+
 * `name` `(string: "")` - Instance name to set when creating
 * `name_prefix` `(string: "")` - Use a prefix with a random generated trailing instead of a fix name. One of `name` or `name_prefix` must be set
 * `pool_name` `(string: <required>)` - The pool name of the instances. This will be set as a intance tag to later find all instances magaged by this plugin.
@@ -90,7 +128,9 @@ If no zones are provided, and none are discovered, a random one will be asigned 
 * `evenly_split_azs` `(string: "")` - Set this to any value other than blank to try to balance the instances over the provided AZs when creating/destroying
 * `server_group_id` `(string: "")` - The server group ID to use for the scheduler to place the server
 * `network_id` `(string: "")` - The network ID where to lauch the servers
+* `network_ids` `(string: "")` - A comma-separated list of network IDs where to launch the servers. This takes priority over `network_id` and `network_name`
 * `network_name` `(string: "")` - The network name to use. One of `network_id` or `network_name` must be set
+* `network_names` `(string: "")` - A comma-separated list of network names to use. This takes priority over `network_id` and `network_name`
 * `floatingip_pool_name` `(string: "")` - The floating ip network name to use. If this is specified a new floating ip will be allocated and attached to every created instance
 * `lb_pool_id` `(string: "")` - The pool ID where to attach the created instances
 * `lb_member_port` `(string: "")` - The port to use when creating the members in the load balancer pool. Must be provided if `lb_pool_id` is set

@@ -621,6 +621,7 @@ type commonCreateData struct {
 	serverGroupID      string
 	securityGroups     []string
 	networkID          string
+	networkIDs         []string
 	floatingIPPool     string
 	availabilityZones  []string
 	evenlydistributeAZ bool
@@ -659,11 +660,15 @@ func (t *TargetPlugin) getCreateData(ctx context.Context, config map[string]stri
 	}
 	data.flavorID = flavorInfo.flavorID
 
-	networkID, err := t.getNetworkID(ctx, config)
+	networkIDs, err := t.getNetworkIDs(ctx, config)
 	if err != nil {
 		return nil, err
 	}
-	data.networkID = networkID
+	// For backward compatibility, if only one network is provided, set networkID as well
+	if len(networkIDs) == 1 {
+		data.networkID = networkIDs[0]
+	}
+	data.networkIDs = networkIDs
 
 	if fipPoolName, ok := config[configKeyFloatingIPPool]; ok && strings.TrimSpace(fipPoolName) != "" {
 		networkID, err := t.getFloatingIPNetworkIDByName(ctx, fipPoolName)
@@ -785,6 +790,70 @@ func (t *TargetPlugin) getNetworkID(ctx context.Context, config map[string]strin
 		return "", fmt.Errorf("required config param %s or %s", configKeyNetworkID, configKeyNetworkName)
 	}
 
+	key := cachekey(networkCacheKey, networkName)
+	if id, ok := t.cache[key]; ok {
+		return id, nil
+	}
+
+	t.logger.Debug("searching for network", "name", networkName)
+	networkID, err := networkutils.IDFromName(ctx, t.networkClient, networkName)
+	if err != nil {
+		return "", fmt.Errorf("failed to find network with name %s: %s", networkName, err)
+	}
+	t.logger.Debug("found network ID", "name", networkName, "id", networkID)
+
+	t.cache[key] = networkID
+	return networkID, nil
+}
+
+func (t *TargetPlugin) getNetworkIDs(ctx context.Context, config map[string]string) ([]string, error) {
+	var networkIDs []string
+	
+	// Check for multiple network IDs first
+	if ids, ok := config[configKeyNetworkIDs]; ok && strings.TrimSpace(ids) != "" {
+		configValueSeparator := defaultConfigValueSeparator
+		if sep, ok := config[configKeyValueSeparator]; ok && sep != "" {
+			configValueSeparator = sep
+		}
+		idList := strings.Split(strings.TrimSpace(ids), configValueSeparator)
+		for _, id := range idList {
+			if trimmedID := strings.TrimSpace(id); trimmedID != "" {
+				networkIDs = append(networkIDs, trimmedID)
+			}
+		}
+		return networkIDs, nil
+	}
+	
+	// Check for multiple network names
+	if names, ok := config[configKeyNetworkNames]; ok && strings.TrimSpace(names) != "" {
+		configValueSeparator := defaultConfigValueSeparator
+		if sep, ok := config[configKeyValueSeparator]; ok && sep != "" {
+			configValueSeparator = sep
+		}
+		nameList := strings.Split(strings.TrimSpace(names), configValueSeparator)
+		for _, name := range nameList {
+			if trimmedName := strings.TrimSpace(name); trimmedName != "" {
+				networkID, err := t.getNetworkIDByName(ctx, trimmedName)
+				if err != nil {
+					return nil, fmt.Errorf("failed to find network with name %s: %s", trimmedName, err)
+				}
+				networkIDs = append(networkIDs, networkID)
+			}
+		}
+		return networkIDs, nil
+	}
+	
+	// Fallback to single network configuration for backward compatibility
+	if networkID, err := t.getNetworkID(ctx, config); err == nil && networkID != "" {
+		networkIDs = append(networkIDs, networkID)
+		return networkIDs, nil
+	}
+	
+	return nil, fmt.Errorf("required config param %s/%s or %s/%s not found", 
+		configKeyNetworkIDs, configKeyNetworkNames, configKeyNetworkID, configKeyNetworkName)
+}
+
+func (t *TargetPlugin) getNetworkIDByName(ctx context.Context, networkName string) (string, error) {
 	key := cachekey(networkCacheKey, networkName)
 	if id, ok := t.cache[key]; ok {
 		return id, nil

@@ -75,7 +75,14 @@ func dataToCreateOpts(common *commonCreateData, custom *customCreateData) (serve
 		Group: common.serverGroupID,
 	}
 
-	if common.networkID != "" {
+	// Handle multiple networks, with fallback to single network for backward compatibility
+	if len(common.networkIDs) > 0 {
+		networks := make([]servers.Network, len(common.networkIDs))
+		for i, networkID := range common.networkIDs {
+			networks[i] = servers.Network{UUID: networkID}
+		}
+		createOpts.Networks = networks
+	} else if common.networkID != "" {
 		createOpts.Networks = []servers.Network{{UUID: common.networkID}}
 	}
 

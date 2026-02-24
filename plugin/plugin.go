@@ -42,8 +42,10 @@ const (
 	configKeyAvZones        = "availavility_zones" // default is to leave AZ blank for nova to fill
 	configKeyESAZ           = "evenly_split_azs"
 	configKeyNetworkID      = "network_id"
+	configKeyNetworkIDs     = "network_ids"
 	configKeyServerGroupID  = "server_group_id"
 	configKeyNetworkName    = "network_name"
+	configKeyNetworkNames   = "network_names"
 	configKeyFloatingIPPool = "floatingip_pool_name"
 	configKeySGNames        = "security_groups" // comma separated values
 	configKeyUserDataT      = "user_data_template"
