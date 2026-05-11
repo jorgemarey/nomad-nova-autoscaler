@@ -47,6 +47,7 @@ const (
 	configKeyFloatingIPPool = "floatingip_pool_name"
 	configKeySGNames        = "security_groups" // comma separated values
 	configKeyUserDataT      = "user_data_template"
+	configKeyVolumeSize     = "volume_size"
 	configKeyMetadata       = "metadata" // comma separated k=v values
 	configKeyTags           = "tags"     // comma separated values
 	configKeyLBPoolID       = "lb_pool_id"

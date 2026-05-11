@@ -56,7 +56,7 @@ scaling "worker_pool_policy" {
     }
 
     target "os-nova" {
-      dry-run = false
+      dry_run = "false"
 
       evenly_split_azs   = true
       stop_first         = true
@@ -98,6 +98,9 @@ If no zones are provided, and none are discovered, a random one will be asigned 
 * `security_groups` `(string: "")` - A comma-separated list of SG names to provide on creation
 * `user_data_template` `(string: "")` - The path to a file containing the user data for the instance creation. This will be treated as a golang
 template, so {{ }} characters will be executed. `.Name`, `.AZ`, `.RandomUUID` and `.PoolName` can be used
+* `volume_size` `(string: "")` - When set to a non-zero integer, the instance is booted from a Cinder volume of this size (in GB) instead of the
+ephemeral disk provided by the flavor. Uses `block_device_mapping_v2` with `source_type=image` and `destination_type=volume`. Useful when the
+flavor's ephemeral disk is too small for the workload
 * `metadata` `(string: "")` - A comma-separated, equal-separated key value items to add to the servers. e.g. "k1=v,k2=b"
 * `tags` `(string: "")` - A comma-separated list of tags to apply on the servers
 * `value_separator` `(string: ",")` - Separator to use when splitting configuraiton options that are used as lists. Changing this value will afect the

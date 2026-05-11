@@ -62,7 +62,7 @@ type templateData struct {
 	PoolName        string
 }
 
-func dataToCreateOpts(common *commonCreateData, custom *customCreateData) (servers.CreateOpts, servers.SchedulerHintOpts, error) {
+func dataToCreateOpts(common *commonCreateData, custom *customCreateData) (servers.CreateOptsBuilder, servers.SchedulerHintOpts, error) {
 	createOpts := servers.CreateOpts{
 		Name:           common.name,
 		ImageRef:       common.imageID,
@@ -109,6 +109,20 @@ func dataToCreateOpts(common *commonCreateData, custom *customCreateData) (serve
 			return createOpts, schedOpts, fmt.Errorf("error executing template file %s: %s", common.userDataTemplate, err)
 		}
 		createOpts.UserData = buf.Bytes()
+	}
+
+	if common.volumeSize > 0 {
+		createOpts.ImageRef = ""
+		createOpts.BlockDevice = []servers.BlockDevice{
+			{
+				BootIndex:           0,
+				SourceType:          "image",
+				DestinationType:     "volume",
+				UUID:                common.imageID,
+				VolumeSize:          common.volumeSize,
+				DeleteOnTermination: true,
+			},
+		}
 	}
 
 	return createOpts, schedOpts, nil
