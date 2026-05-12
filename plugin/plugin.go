@@ -229,17 +229,6 @@ func (t *TargetPlugin) Scale(action sdk.ScalingAction, config map[string]string)
 
 // Status satisfies the Status function on the target.Target interface.
 func (t *TargetPlugin) Status(config map[string]string) (*sdk.TargetStatus, error) {
-	// Perform our check of the Nomad node pool. If the pool is not ready, we
-	// can exit here and avoid calling the AWS API as it won't affect the
-	// outcome.
-	ready, err := t.clusterUtils.IsPoolReady(config)
-	if err != nil {
-		return nil, fmt.Errorf("failed to run Nomad node readiness check: %v", err)
-	}
-	if !ready {
-		return &sdk.TargetStatus{Ready: ready}, nil
-	}
-
 	// We cannot get the status of a pool without knowing the pool name.
 	pool, ok := config[configKeyPoolName]
 	if !ok {
@@ -248,13 +237,25 @@ func (t *TargetPlugin) Status(config map[string]string) (*sdk.TargetStatus, erro
 
 	ctx, cancel := context.WithTimeout(context.Background(), t.statusTimeout)
 	defer cancel()
+
+	// Count Nova servers first — this is the authoritative pool size. We must
+	// not skip this call based on IsPoolReady, because returning Count=0 while
+	// Nomad nodes are still initializing causes the autoscaler to create a new
+	// VM on every evaluation cycle even though the correct number already exist.
 	total, active, _, _, err := t.countServers(ctx, pool)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count Nova servers: %v", err)
 	}
 
+	// IsPoolReady guards the Ready flag: when Nomad nodes are initializing or
+	// draining the pool is considered unstable and scale-in is suppressed.
+	ready, err := t.clusterUtils.IsPoolReady(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to run Nomad node readiness check: %v", err)
+	}
+
 	resp := &sdk.TargetStatus{
-		Ready: total == active,
+		Ready: ready && (total == active),
 		Count: total,
 		Meta:  make(map[string]string),
 	}
