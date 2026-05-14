@@ -1,3 +1,8 @@
+## 0.6.1 (Unreleaed)
+
+Features:
+* Added option to allow specifying multiple networks
+
 ## 0.6.0 (Jun 10, 2025)
 
 Features:
