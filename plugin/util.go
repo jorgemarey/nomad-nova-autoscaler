@@ -82,8 +82,6 @@ func dataToCreateOpts(common *commonCreateData, custom *customCreateData) (serve
 			networks[i] = servers.Network{UUID: networkID}
 		}
 		createOpts.Networks = networks
-	} else if common.networkID != "" {
-		createOpts.Networks = []servers.Network{{UUID: common.networkID}}
 	}
 
 	if custom.name != "" {

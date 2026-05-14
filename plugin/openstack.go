@@ -620,7 +620,6 @@ type commonCreateData struct {
 	flavorID           string
 	serverGroupID      string
 	securityGroups     []string
-	networkID          string
 	networkIDs         []string
 	floatingIPPool     string
 	availabilityZones  []string
@@ -663,10 +662,6 @@ func (t *TargetPlugin) getCreateData(ctx context.Context, config map[string]stri
 	networkIDs, err := t.getNetworkIDs(ctx, config)
 	if err != nil {
 		return nil, err
-	}
-	// For backward compatibility, if only one network is provided, set networkID as well
-	if len(networkIDs) == 1 {
-		data.networkID = networkIDs[0]
 	}
 	data.networkIDs = networkIDs
 
@@ -790,6 +785,10 @@ func (t *TargetPlugin) getNetworkID(ctx context.Context, config map[string]strin
 		return "", fmt.Errorf("required config param %s or %s", configKeyNetworkID, configKeyNetworkName)
 	}
 
+	return t.getNetworkIDByName(ctx, networkName)
+}
+
+func (t *TargetPlugin) getNetworkIDByName(ctx context.Context, networkName string) (string, error) {
 	key := cachekey(networkCacheKey, networkName)
 	if id, ok := t.cache[key]; ok {
 		return id, nil
@@ -808,7 +807,7 @@ func (t *TargetPlugin) getNetworkID(ctx context.Context, config map[string]strin
 
 func (t *TargetPlugin) getNetworkIDs(ctx context.Context, config map[string]string) ([]string, error) {
 	var networkIDs []string
-	
+
 	// Check for multiple network IDs first
 	if ids, ok := config[configKeyNetworkIDs]; ok && strings.TrimSpace(ids) != "" {
 		configValueSeparator := defaultConfigValueSeparator
@@ -823,7 +822,7 @@ func (t *TargetPlugin) getNetworkIDs(ctx context.Context, config map[string]stri
 		}
 		return networkIDs, nil
 	}
-	
+
 	// Check for multiple network names
 	if names, ok := config[configKeyNetworkNames]; ok && strings.TrimSpace(names) != "" {
 		configValueSeparator := defaultConfigValueSeparator
@@ -842,32 +841,15 @@ func (t *TargetPlugin) getNetworkIDs(ctx context.Context, config map[string]stri
 		}
 		return networkIDs, nil
 	}
-	
+
 	// Fallback to single network configuration for backward compatibility
 	if networkID, err := t.getNetworkID(ctx, config); err == nil && networkID != "" {
 		networkIDs = append(networkIDs, networkID)
 		return networkIDs, nil
 	}
-	
-	return nil, fmt.Errorf("required config param %s/%s or %s/%s not found", 
+
+	return nil, fmt.Errorf("required config param %s/%s or %s/%s not found",
 		configKeyNetworkIDs, configKeyNetworkNames, configKeyNetworkID, configKeyNetworkName)
-}
-
-func (t *TargetPlugin) getNetworkIDByName(ctx context.Context, networkName string) (string, error) {
-	key := cachekey(networkCacheKey, networkName)
-	if id, ok := t.cache[key]; ok {
-		return id, nil
-	}
-
-	t.logger.Debug("searching for network", "name", networkName)
-	networkID, err := networkutils.IDFromName(ctx, t.networkClient, networkName)
-	if err != nil {
-		return "", fmt.Errorf("failed to find network with name %s: %s", networkName, err)
-	}
-	t.logger.Debug("found network ID", "name", networkName, "id", networkID)
-
-	t.cache[key] = networkID
-	return networkID, nil
 }
 
 func (t *TargetPlugin) getFloatingIPNetworkIDByName(ctx context.Context, poolName string) (string, error) {
