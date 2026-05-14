@@ -627,6 +627,7 @@ type commonCreateData struct {
 	userDataTemplate   string
 	metadata           map[string]string
 	tags               []string
+	volumeSize         int
 }
 
 func (t *TargetPlugin) getCreateData(ctx context.Context, config map[string]string) (*commonCreateData, error) {
@@ -714,6 +715,14 @@ func (t *TargetPlugin) getCreateData(ctx context.Context, config map[string]stri
 		if _, err := os.Stat(data.userDataTemplate); err != nil {
 			return nil, fmt.Errorf("error with provided template file: %s", err)
 		}
+	}
+
+	if vs, ok := config[configKeyVolumeSize]; ok && vs != "" {
+		size, err := strconv.Atoi(vs)
+		if err != nil {
+			return nil, fmt.Errorf("invalid value for %s: %v", configKeyVolumeSize, err)
+		}
+		data.volumeSize = size
 	}
 
 	return data, nil
